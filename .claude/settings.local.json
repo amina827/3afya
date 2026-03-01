@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(node:*)",
+      "WebSearch",
+      "Bash(npx create-next-app@14:*)",
+      "Bash(cp:*)",
+      "Bash(npm install:*)",
+      "Bash(mkdir:*)",
+      "Bash(npx next:*)",
+      "Bash(npx kill-port:*)"
+    ]
+  }
+}

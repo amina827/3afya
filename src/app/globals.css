@@ -1,0 +1,199 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --gold: #D4A017;
+  --gold-light: #F0C040;
+  --gold-bright: #FFD700;
+  --gold-dark: #B8860B;
+  --green-accent: #48BB78;
+  --green-soft: #E8F5E9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  background: #FFFDF5;
+  color: #3D2E00;
+}
+
+/* Golden shimmer text effect */
+.text-shimmer {
+  background: linear-gradient(
+    90deg,
+    #B8860B 0%,
+    #FFD700 20%,
+    #F0C040 40%,
+    #FFD700 60%,
+    #B8860B 80%,
+    #FFD700 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Green shimmer text */
+.text-shimmer-green {
+  background: linear-gradient(
+    90deg,
+    #276749 0%,
+    #48BB78 25%,
+    #68D391 50%,
+    #48BB78 75%,
+    #276749 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Golden gradient for buttons/CTAs */
+.bg-gold-gradient {
+  background: linear-gradient(135deg, #F0C040 0%, #D4A017 40%, #B8860B 100%);
+}
+
+/* Green gradient for secondary buttons */
+.bg-green-btn {
+  background: linear-gradient(135deg, #68D391 0%, #48BB78 40%, #38A169 100%);
+}
+
+/* Page background gradient - warm golden cream */
+.bg-green-gradient {
+  background: linear-gradient(180deg, #FFFDF5 0%, #FFF8E1 30%, #FFF0C8 60%, #FFFDF5 100%);
+}
+
+/* Green section background */
+.bg-green-section {
+  background: linear-gradient(180deg, #F0FFF4 0%, #C6F6D5 50%, #F0FFF4 100%);
+}
+
+/* Card glass effect - golden tint */
+.glass-card {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(212, 160, 23, 0.2);
+  box-shadow: 0 2px 16px rgba(212, 160, 23, 0.08);
+}
+
+/* Green glass card */
+.glass-card-green {
+  background: rgba(240, 255, 244, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(72, 187, 120, 0.25);
+  box-shadow: 0 2px 16px rgba(72, 187, 120, 0.08);
+}
+
+/* Scanner overlay */
+.scanner-overlay {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanner-overlay::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #D4A017, transparent);
+  animation: scanLine 2s ease-in-out infinite;
+}
+
+/* Gauge animation */
+.gauge-fill {
+  transition: stroke-dashoffset 1.5s ease-out;
+}
+
+/* Golden oil drop */
+.oil-drop {
+  display: inline-block;
+  width: 48px;
+  height: 48px;
+  background: radial-gradient(ellipse at 35% 30%, #FFE680 0%, #FFD700 30%, #D4A017 60%, #B8860B 100%);
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  box-shadow: 0 4px 20px rgba(212, 160, 23, 0.4), inset 0 -4px 8px rgba(184, 134, 11, 0.3), inset 0 4px 8px rgba(255, 231, 128, 0.6);
+  position: relative;
+}
+
+.oil-drop::after {
+  content: '';
+  position: absolute;
+  top: 25%;
+  left: 30%;
+  width: 20%;
+  height: 15%;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+  filter: blur(2px);
+}
+
+.oil-drop-lg {
+  width: 80px;
+  height: 80px;
+  box-shadow: 0 6px 30px rgba(212, 160, 23, 0.5), inset 0 -6px 12px rgba(184, 134, 11, 0.3), inset 0 6px 12px rgba(255, 231, 128, 0.6);
+}
+
+/* Golden divider */
+.gold-divider {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #D4A017, #FFD700, #D4A017, transparent);
+}
+
+/* Green divider */
+.green-divider {
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #48BB78, #68D391, #48BB78, transparent);
+}
+
+/* Stat card with golden left border */
+.stat-card {
+  border-inline-start: 3px solid #D4A017;
+}
+
+/* Stat card with green left border */
+.stat-card-green {
+  border-inline-start: 3px solid #48BB78;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(212, 160, 23, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(212, 160, 23, 0.3);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 160, 23, 0.5);
+}
+
+/* Bottom nav safe area */
+.pb-safe {
+  padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* RTL-safe utility */
+[dir="rtl"] .flip-rtl {
+  transform: scaleX(-1);
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
