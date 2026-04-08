@@ -35,8 +35,8 @@ export function ResultsDisplay({ result, onReset }: ResultsDisplayProps) {
         />
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      {/* Volume Stats: Liters & Cups */}
+      <div className="grid grid-cols-2 gap-3 mb-3">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -44,8 +44,12 @@ export function ResultsDisplay({ result, onReset }: ResultsDisplayProps) {
           className="glass-card stat-card rounded-xl p-4 text-center"
         >
           <p className="text-gold-600 text-[10px] mb-1">{t('detect.remaining')}</p>
-          <p className="text-gold-700 text-xl font-bold">{result.remainingMl}</p>
-          <p className="text-gold-500 text-[10px]">{t('scanner.ml')}</p>
+          <p className="text-gold-700 text-xl font-bold">{result.remainingLiters}</p>
+          <p className="text-gold-500 text-[10px]">{lang === 'ar' ? 'لتر' : 'Liters'}</p>
+          <div className="mt-1 border-t border-gold-200/30 pt-1">
+            <p className="text-gold-600 text-lg font-bold">{result.remainingCups}</p>
+            <p className="text-gold-500 text-[10px]">{lang === 'ar' ? 'كوب' : 'Cups'}</p>
+          </div>
         </motion.div>
 
         <motion.div
@@ -55,19 +59,48 @@ export function ResultsDisplay({ result, onReset }: ResultsDisplayProps) {
           className="glass-card stat-card rounded-xl p-4 text-center"
         >
           <p className="text-gold-600 text-[10px] mb-1">{t('detect.consumed')}</p>
-          <p className="text-gold-800 text-xl font-bold">{result.consumedMl}</p>
-          <p className="text-gold-500 text-[10px]">{t('scanner.ml')}</p>
+          <p className="text-gold-800 text-xl font-bold">{result.consumedLiters}</p>
+          <p className="text-gold-500 text-[10px]">{lang === 'ar' ? 'لتر' : 'Liters'}</p>
+          <div className="mt-1 border-t border-gold-200/30 pt-1">
+            <p className="text-gold-700 text-lg font-bold">{result.consumedCups}</p>
+            <p className="text-gold-500 text-[10px]">{lang === 'ar' ? 'كوب' : 'Cups'}</p>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* ML + Days row */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="glass-card stat-card rounded-xl p-3 text-center"
+        >
+          <p className="text-gold-600 text-[9px] mb-1">{t('detect.remaining')}</p>
+          <p className="text-gold-700 text-lg font-bold">{result.remainingMl}</p>
+          <p className="text-gold-500 text-[9px]">{t('scanner.ml')}</p>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="glass-card-green stat-card-green rounded-xl p-4 text-center"
+          className="glass-card stat-card rounded-xl p-3 text-center"
         >
-          <p className="text-green-600 text-[10px] mb-1">{t('detect.daysLeft')}</p>
-          <p className="text-green-600 text-xl font-bold">{result.daysRemaining}</p>
-          <p className="text-green-500 text-[10px]">📅</p>
+          <p className="text-gold-600 text-[9px] mb-1">{t('detect.consumed')}</p>
+          <p className="text-gold-800 text-lg font-bold">{result.consumedMl}</p>
+          <p className="text-gold-500 text-[9px]">{t('scanner.ml')}</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+          className="glass-card-green stat-card-green rounded-xl p-3 text-center"
+        >
+          <p className="text-green-600 text-[9px] mb-1">{t('detect.daysLeft')}</p>
+          <p className="text-green-600 text-lg font-bold">{result.daysRemaining}</p>
+          <p className="text-green-500 text-[9px]">📅</p>
         </motion.div>
       </div>
 

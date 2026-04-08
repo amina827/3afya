@@ -11,6 +11,15 @@ export interface UploadResponse {
   status: 'pending' | 'processing' | 'done' | 'failed';
 }
 
+export interface BottleBBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  image_w: number;
+  image_h: number;
+}
+
 export interface ScanResult {
   scan: string;
   oil_ratio: number;
@@ -21,6 +30,8 @@ export interface ScanResult {
   consumed_cups_range: [number, number];
   remaining_liters_estimate: number;
   processed_image_url: string | null;
+  original_image_url: string | null;
+  bottle_bbox: BottleBBox | null;
   confidence_score: number;
   processing_time_ms: number;
 }
@@ -43,15 +54,12 @@ export interface FeedbackResponse {
   created_at: string;
 }
 
-// Map frontend product IDs to backend bottle IDs
-const PRODUCT_TO_BOTTLE: Record<string, string> = {
-  'afia-gold-1500': 'afia-5l',
-  'afia-classic-750': 'afia-2l',
-  'afia-olive-1000': 'afia-2l',
-};
+// Single 1.5L bottle - all product IDs map to it
+const DEFAULT_BOTTLE_ID = 'afia-1500';
 
 export function getBottleId(productId: string): string {
-  return PRODUCT_TO_BOTTLE[productId] || 'afia-5l';
+  void productId;
+  return DEFAULT_BOTTLE_ID;
 }
 
 /** Step 1: Create a scan session */
@@ -115,6 +123,51 @@ export async function submitFeedback(
     body: JSON.stringify({ scan: scanId, actual_cups: actualCups, notes }),
   });
   if (!res.ok) throw new Error(`Failed to submit feedback: ${res.status}`);
+  return res.json();
+}
+
+/** Step 6: Upload a training image for the local engine */
+export async function uploadTrainingImage(
+  bottleId: string,
+  image: File,
+  actualOilPercentage: number,
+  lighting: string = 'daylight',
+  environment: string = 'kitchen',
+  cameraInfo: string = '',
+  notes: string = '',
+  uploadedBy: string = '',
+): Promise<{ id: number; bottle_id: string; actual_oil_percentage: number }> {
+  const formData = new FormData();
+  formData.append('bottle_id', bottleId);
+  formData.append('image', image);
+  formData.append('actual_oil_percentage', actualOilPercentage.toString());
+  formData.append('lighting', lighting);
+  formData.append('environment', environment);
+  if (cameraInfo) formData.append('camera_info', cameraInfo);
+  if (notes) formData.append('notes', notes);
+  if (uploadedBy) formData.append('uploaded_by', uploadedBy);
+
+  const res = await fetch(`${API_URL}/api/training/upload/`, {
+    method: 'POST',
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(err.error || `Upload failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** Get training stats */
+export async function getTrainingStats(): Promise<{
+  total_images: number;
+  verified_images: number;
+  by_lighting: Record<string, number>;
+  by_environment: Record<string, number>;
+  by_bottle: Array<{ bottle__bottle_id: string; bottle__bottle_name: string; count: number }>;
+}> {
+  const res = await fetch(`${API_URL}/api/training/stats/`);
+  if (!res.ok) throw new Error(`Failed to get stats: ${res.status}`);
   return res.json();
 }
 

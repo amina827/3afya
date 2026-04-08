@@ -49,10 +49,17 @@ export function calculateResults(
   const dailyUsage = 30; // avg ml per day
   const daysRemaining = Math.max(1, Math.round(remainingMl / dailyUsage));
 
+  const remainingLiters = Math.round(remainingMl / 10) / 100;
+  const consumedLiters = Math.round(consumedMl / 10) / 100;
+  const cupSize = 200; // ml per cup
   return {
     level,
     remainingMl,
     consumedMl,
+    remainingLiters,
+    consumedLiters,
+    remainingCups: Math.round((remainingMl / cupSize) * 10) / 10,
+    consumedCups: Math.round((consumedMl / cupSize) * 10) / 10,
     daysRemaining,
     nutrition: {
       calories: Math.round(remainingMl * caloriesPerMl),

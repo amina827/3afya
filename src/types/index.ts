@@ -15,6 +15,10 @@ export interface OilResult {
   level: number; // 0-100 percentage
   remainingMl: number;
   consumedMl: number;
+  remainingLiters: number;
+  consumedLiters: number;
+  remainingCups: number;
+  consumedCups: number;
   daysRemaining: number;
   nutrition: NutritionInfo;
 }

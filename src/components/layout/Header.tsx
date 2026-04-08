@@ -25,8 +25,14 @@ export function Header() {
           <Link href="/detect" className="text-gold-700 hover:text-gold-600 transition-colors text-sm font-medium">
             {t('nav.detect')}
           </Link>
+          <Link href="/slider" className="text-gold-700 hover:text-gold-600 transition-colors text-sm font-medium">
+            {t('nav.slider')}
+          </Link>
           <Link href="/recipes" className="text-gold-700 hover:text-gold-600 transition-colors text-sm font-medium">
             {t('nav.recipes')}
+          </Link>
+          <Link href="/training" className="text-gold-700 hover:text-gold-600 transition-colors text-sm font-medium">
+            {t('nav.training')}
           </Link>
         </nav>
 

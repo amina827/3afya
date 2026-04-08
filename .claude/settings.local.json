@@ -9,7 +9,9 @@
       "Bash(npm install:*)",
       "Bash(mkdir:*)",
       "Bash(npx next:*)",
-      "Bash(npx kill-port:*)"
+      "Bash(npx kill-port:*)",
+      "Bash(gh auth:*)",
+      "Bash(gh repo:*)"
     ]
   }
 }

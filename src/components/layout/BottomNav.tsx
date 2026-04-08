@@ -8,7 +8,9 @@ const navItems = [
   { href: '/', icon: '🏠', key: 'nav.home' },
   { href: '/scan', icon: '📷', key: 'nav.scan' },
   { href: '/detect', icon: '🔍', key: 'nav.detect' },
+  { href: '/slider', icon: '🧮', key: 'nav.slider' },
   { href: '/recipes', icon: '📖', key: 'nav.recipes' },
+  { href: '/training', icon: '🧪', key: 'nav.training' },
 ];
 
 export function BottomNav() {
