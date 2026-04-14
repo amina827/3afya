@@ -31,20 +31,21 @@ interface QualityChecks {
   tilt: number;       // 0-1 (0=tilted, 1=upright)
 }
 
-// Frame guide position (centered, normalized 0-1 of viewBox 100x133)
-// Full bottle bounding box: x=14..86, y=8..122 → w=72, h=114
-// Volume range (1500ml at top of body, 0ml at base): y=30..122
+// Frame guide position (centered, normalized 0-1 of viewBox 100×133)
+// Full bottle bounding box: x=12..86, y=7..123 → w=74, h=116
+// Volume range (1500ml at shoulder, 0ml at base): y=19..123
 const FRAME = {
-  cx: 50 / 100,     // (14+86)/2 / 100 = 0.50
-  cy: 65 / 133,     // (8+122)/2 / 133 ≈ 0.489
-  width: 72 / 100,   // 0.72
-  height: 114 / 133, // ≈ 0.857
+  cx: 49 / 100,     // (12+86)/2 / 100 = 0.49
+  cy: 65 / 133,     // (7+123)/2 / 133 ≈ 0.489
+  width: 74 / 100,   // 0.74
+  height: 116 / 133, // ≈ 0.872
 };
 
 // The volume range within the frame (where ml/% markers go)
-// Body region: y=30 (1500ml) to y=122 (0ml)
-const VOLUME_TOP_Y = 30;
-const VOLUME_BOTTOM_Y = 122;
+// Fill-level line (1500 cc) is at the shoulder: y≈19
+// Base: y≈123
+const VOLUME_TOP_Y = 19;
+const VOLUME_BOTTOM_Y = 123;
 
 // Quality thresholds
 const MIN_BRIGHTNESS = 0.45;
@@ -698,42 +699,42 @@ export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
           />
           {(alignState === 'aligned' || alignState === 'capturing') && (
             <>
-              <circle cx="52" cy="30" r="1.5" fill={frameColor} />
-              <circle cx="52" cy="118" r="1.5" fill={frameColor} />
+              <circle cx="42" cy="7" r="1.5" fill={frameColor} />
+              <circle cx="42" cy="123" r="1.5" fill={frameColor} />
             </>
           )}
 
           {/* Stage indicator: highlight neck (top) or base (bottom) */}
           {captureStage === 'neck' && (
             <g>
-              {/* Pulsing band at the neck area (y=8 to y=28) */}
+              {/* Band at the cap/neck area (y=7 to y=19) */}
               <rect
-                x="38" y="8"
-                width="24" height="20"
-                fill="rgba(34, 197, 94, 0.2)"
+                x="26" y="7"
+                width="32" height="12"
+                fill="rgba(34, 197, 94, 0.15)"
                 stroke="#22c55e"
                 strokeWidth="0.6"
                 strokeDasharray="2 1"
               />
               <text
-                x="50" y="6"
+                x="42" y="5"
                 fontSize="3.5"
                 fill="#22c55e"
                 textAnchor="middle"
                 fontWeight="bold"
                 style={{ paintOrder: 'stroke', stroke: '#000', strokeWidth: 0.5 }}
               >
-                {lang === 'ar' ? 'العنق' : 'NECK'}
+                {lang === 'ar' ? 'العنق ↑' : 'NECK ↑'}
               </text>
             </g>
           )}
           {captureStage === 'base' && (
             <g>
-              {/* Pulsing band at the base area */}
+              {/* Band at the base area (y=113 to y=123) */}
               <rect
-                x="14" y="110"
-                width="54" height="14"
-                fill="rgba(34, 197, 94, 0.2)"
+                x="12" y="113"
+                width="57" height="10"
+                fill="rgba(34, 197, 94, 0.15)"
                 stroke="#22c55e"
                 strokeWidth="0.6"
                 strokeDasharray="2 1"
@@ -746,7 +747,7 @@ export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
                 fontWeight="bold"
                 style={{ paintOrder: 'stroke', stroke: '#000', strokeWidth: 0.5 }}
               >
-                {lang === 'ar' ? 'القاع' : 'BASE'}
+                {lang === 'ar' ? 'القاع ↓' : 'BASE ↓'}
               </text>
             </g>
           )}
@@ -1015,49 +1016,70 @@ function QualityChip({
 }
 
 // ============================================================
-// SVG path for the Afia 1.5L bottle - FULL outline with cap on top
-// Cap (top) → neck → shoulder → body with handle → base
-// Volume range: y=30 (1500ml top) to y=122 (0ml base)
-// Bounds: x=14..86, y=8..122
+// SVG path for the Afia 1.5L bottle — from ENGINEERING DRAWING
+//
+// Actual dimensions (mm):
+//   Total height:   301 ± 1.2
+//   Cap diameter:   Ø 37.3 ± 0.5  (38mm neck finish)
+//   Neck height:    22 (16.5 + 5.5)
+//   Shoulder width: 52.5
+//   Body width:     70
+//   Base width:     78.1
+//   Handle:         right side, ~25-60% height
+//
+// Proportions:
+//   cap/base width:      37.3 / 78.1 = 47.8 %
+//   shoulder/base width: 52.5 / 78.1 = 67.2 %
+//   body/base width:     70   / 78.1 = 89.6 %
+//   neck height:         22   / 301  =  7.3 %
+//   base height:         16   / 301  =  5.3 %
+//
+// Mapped to viewBox 100 × 133:
+//   Base width  → 60 units (x 12..72)
+//   Cap width   → 29 units (x 28..57)  — 47.8 %
+//   Shoulder    → 40 units (x 22..62)  — 67.2 %
+//   Body middle → 54 units (x 15..69)  — 89.6 %
+//   Handle      → extends to x 86
+//
+// Fill-level mark (1500 cc) ≈ y 19 (shoulder line)
+// Bounds: x 12..86, y 7..123
 // ============================================================
 function getBottlePath(): string {
   return `
-    M 44 8
-    L 56 8
-    Q 58 8 58 10
-    L 58 18
-    Q 58 20 56 20
-    L 56 24
-    Q 56 27 58 29
-    Q 60 32 63 36
-    Q 67 40 73 42
-    L 80 42
-    Q 86 42 86 48
-    L 86 76
-    Q 86 82 80 82
-    L 73 82
-    Q 70 84 68 88
-    L 68 110
-    Q 68 119 60 122
-    L 28 122
-    Q 14 122 14 110
-    L 14 50
-    Q 14 38 22 34
-    Q 30 30 38 26
-    L 42 22
-    L 42 20
-    Q 42 18 44 18
-    L 44 10
-    Q 44 8 44 8
+    M 30 7
+    L 54 7
+    Q 56 7 56 9
+    L 56 13
+    Q 56 15 54 15
+    L 54 19
+    Q 58 23 62 28
+    Q 67 34 69 42
+    L 69 30
+    Q 73 26 78 26
+    Q 86 26 86 36
+    L 86 68
+    Q 86 78 78 78
+    Q 73 78 69 74
+    L 69 113
+    Q 69 121 62 123
+    L 18 123
+    Q 12 121 12 113
+    L 12 42
+    Q 12 32 18 26
+    Q 24 20 30 18
+    L 30 15
+    Q 28 15 28 13
+    L 28 9
+    Q 28 7 30 7
     Z
-    M 73 48
-    Q 70 48 70 51
-    L 70 76
-    Q 70 79 73 79
-    L 80 79
-    Q 83 79 83 76
-    L 83 51
-    Q 83 48 80 48
+    M 72 32
+    Q 72 30 74 30
+    L 82 30
+    Q 84 30 84 32
+    L 84 72
+    Q 84 74 82 74
+    L 74 74
+    Q 72 74 72 72
     Z
   `;
 }

@@ -277,29 +277,59 @@ export function OilBottleSlider({
               />
             </svg>
 
-            {/* Drag handle indicator */}
+            {/* Oil level indicator */}
             <motion.div
               className="absolute left-0 right-0 pointer-events-none"
               style={{ top: handleY, marginTop: '-12px' }}
             >
               <div className="relative h-6 flex items-center justify-center">
-                <div
-                  className="absolute inset-x-2 h-1 rounded-full shadow-lg"
-                  style={{ backgroundColor: levelColor }}
-                />
-                <motion.div
-                  animate={{
-                    scale: isDragging ? 1.15 : 1,
-                  }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                  className="absolute right-0 w-7 h-7 rounded-full shadow-2xl border-2 border-white flex items-center justify-center"
-                  style={{ backgroundColor: levelColor }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
-                    <path d="M7 10l5 5 5-5z" />
-                    <path d="M7 14l5-5 5 5z" />
-                  </svg>
-                </motion.div>
+                {isDragging ? (
+                  /* While dragging: pointer triangle + thin guide line */
+                  <>
+                    <div className="absolute inset-x-4 h-px bg-white/60" />
+                    <motion.div
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="absolute -left-1 w-0 h-0"
+                      style={{
+                        borderTop: '8px solid transparent',
+                        borderBottom: '8px solid transparent',
+                        borderLeft: `10px solid ${levelColor}`,
+                      }}
+                    />
+                    <motion.div
+                      initial={{ scale: 0.8, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="absolute -right-1 w-0 h-0"
+                      style={{
+                        borderTop: '8px solid transparent',
+                        borderBottom: '8px solid transparent',
+                        borderRight: `10px solid ${levelColor}`,
+                      }}
+                    />
+                  </>
+                ) : (
+                  /* After release: solid line at the selected position */
+                  <>
+                    <motion.div
+                      initial={{ scaleX: 0 }}
+                      animate={{ scaleX: 1 }}
+                      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                      className="absolute inset-x-2 h-[3px] rounded-full shadow-lg"
+                      style={{ backgroundColor: levelColor }}
+                    />
+                    {/* Small percentage label on the line */}
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.15 }}
+                      className="absolute -right-12 px-1.5 py-0.5 rounded text-[10px] font-bold text-white shadow-md"
+                      style={{ backgroundColor: levelColor }}
+                    >
+                      {Math.round(ratio * 100)}%
+                    </motion.div>
+                  </>
+                )}
               </div>
             </motion.div>
           </div>
