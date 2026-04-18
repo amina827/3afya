@@ -32,19 +32,19 @@ interface QualityChecks {
 }
 
 // Frame guide position (centered, normalized 0-1 of viewBox 100×133)
-// Full bottle bounding box (with handle): x=12..80, y=7..123 → w=68, h=116
-// Volume range (1500ml at shoulder line, 0ml at base line): y=22..113
+// Full bottle bounding box (with handle): x=14..84, y=7..123 → w=70, h=116
+// Volume range (1500ml at shoulder line, 0ml at base line): y=20..113
 const FRAME = {
-  cx: 46 / 100,     // (12+80)/2 / 100 = 0.46
+  cx: 49 / 100,     // (14+84)/2 / 100 = 0.49
   cy: 65 / 133,     // (7+123)/2 / 133 ≈ 0.489
-  width: 68 / 100,   // 0.68
+  width: 70 / 100,   // 0.70
   height: 116 / 133, // ≈ 0.872
 };
 
 // The volume range within the frame (where ml/% markers go)
-// Fill-level line (1500 cc) is at the shoulder: y≈22
+// Fill-level line (1500 cc) is at the shoulder: y≈20
 // Base line (oil column bottom): y≈113
-const VOLUME_TOP_Y = 22;
+const VOLUME_TOP_Y = 20;
 const VOLUME_BOTTOM_Y = 113;
 
 // Quality thresholds
@@ -699,25 +699,25 @@ export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
           />
           {(alignState === 'aligned' || alignState === 'capturing') && (
             <>
-              <circle cx="42" cy="7" r="1.5" fill={frameColor} />
-              <circle cx="42" cy="123" r="1.5" fill={frameColor} />
+              <circle cx="41" cy="7" r="1.5" fill={frameColor} />
+              <circle cx="41" cy="123" r="1.5" fill={frameColor} />
             </>
           )}
 
           {/* Stage indicator: highlight neck (top) or base (bottom) */}
           {captureStage === 'neck' && (
             <g>
-              {/* Band at the cap/neck area (y=7 to y=17) */}
+              {/* Band at the cap/neck area (y=7 to y=14) */}
               <rect
-                x="27" y="7"
-                width="30" height="10"
+                x="31" y="7"
+                width="20" height="7"
                 fill="rgba(34, 197, 94, 0.15)"
                 stroke="#22c55e"
                 strokeWidth="0.6"
                 strokeDasharray="2 1"
               />
               <text
-                x="42" y="5"
+                x="41" y="5"
                 fontSize="3.5"
                 fill="#22c55e"
                 textAnchor="middle"
@@ -732,15 +732,15 @@ export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
             <g>
               {/* Band at the base area (y=113 to y=123) */}
               <rect
-                x="12" y="113"
-                width="60" height="10"
+                x="14" y="113"
+                width="54" height="10"
                 fill="rgba(34, 197, 94, 0.15)"
                 stroke="#22c55e"
                 strokeWidth="0.6"
                 strokeDasharray="2 1"
               />
               <text
-                x="42" y="131"
+                x="41" y="131"
                 fontSize="3.5"
                 fill="#22c55e"
                 textAnchor="middle"
@@ -1016,83 +1016,57 @@ function QualityChip({
 }
 
 // ============================================================
-// SVG path for the Afia 1.5L bottle — traced from ENGINEERING DRAWING
+// SVG path for the Afia 1.5L bottle — matching the real bottle silhouette.
 //
-// Actual dimensions (mm):
-//   Total height:   301 ± 1.2
-//   Cap diameter:   Ø 37.3 ± 0.5   (38mm neck finish, threaded)
-//   Cap thread h:   16.5
-//   R4 ring flare:  ~4 (neck collar)
-//   Straight neck:  5.5
-//   Shoulder ref:   52.5 (width at mid-shoulder)
-//   Body width:     70
-//   Base width:     78.1
-//   Base rim:       16
-//   Handle:         integrated on the right side
+// Shape: narrow cap at top, smooth curved shoulder, rectangular body
+// with rounded base, and an integrated loop handle on the upper-right
+// (the handle branches off right below the cap and reattaches ~40%
+// down the body, forming a grip loop with an oval hole inside).
 //
-// Mapped to viewBox 100 × 133 (centered at x=42 for body):
-//   Cap / neck width  → 28 units (x 28..56)  — 37.3 / 78.1
-//   Body width        → 56 units (x 14..70)  — ~70 / 78.1 (body straight walls)
-//   Base width        → 60 units (x 12..72)  — 78.1 / 78.1 (slight flare)
-//   Handle outer ext  → x=80 (10 units beyond body right at x=70)
+// Mapped to viewBox 100 × 133:
+//   Cap / neck:     x=33..51 (width 18)  y=7..13
+//   Body:           x=14..68 (width 54)  y=28..113
+//   Base rounded:   y=113..123 (rounded corners)
+//   Handle outer:   extends to x=84,     y=14..58
+//   Grip hole:      x=70..82, y=30..52
 //
-// Vertical segments (y):
-//   7..12  cap / thread section (16.5mm)
-//   12..15 R4 ring flare (neck collar)
-//   15..17 short straight neck (5.5mm)
-//   17..31 shoulder transition (distinctive straight diagonal lines on both sides)
-//   31..113 main body (straight walls)
-//   113..123 base (slight outward flare with rounded corners)
-//
-// Handle on right:
-//   37..70 outer extent (x=80)
-//   43..63 inner grip hole (x=72..78)
-//
-// Fill-level mark (1500 cc) ≈ y 22 (just below shoulder top)
-// Bounds: x 12..80, y 7..123
+// Silhouette flow (clockwise from cap top-left):
+//   cap top → cap top-right corner → cap right → right shoulder
+//   curves OUT and UP into the handle loop → handle top → handle right
+//   → handle bottom curves back IN to body right edge → body right down
+//   → base right corner → base bottom → base left corner → body left up
+//   → left shoulder curves smoothly into cap left → cap top-left corner.
 // ============================================================
 function getBottlePath(): string {
   return `
-    M 30 7
-    L 54 7
-    Q 56 7 56 9
-    L 56 12
-    Q 57 12 57 13.5
-    Q 57 15 56 15
-    L 56 17
-    Q 58 19 60 22
-    L 67 31
-    Q 70 34 70 37
-    Q 76 37 80 43
-    L 80 61
-    Q 80 67 76 69
-    Q 72 70 70 70
-    L 70 113
-    Q 72 113 72 115
-    L 72 119
-    Q 72 123 68 123
-    L 16 123
-    Q 12 123 12 119
-    L 12 115
-    Q 12 113 14 113
-    L 14 37
-    Q 14 34 16 32
-    L 25 22
-    Q 27 19 28 17
-    L 28 15
-    Q 27 15 27 13.5
-    Q 27 12 28 12
-    L 28 9
-    Q 28 7 30 7
+    M 33 7
+    L 49 7
+    Q 51 7 51 9
+    L 51 13
+    Q 54 14 60 15
+    Q 73 15 80 23
+    Q 84 29 84 35
+    L 84 50
+    Q 84 56 78 57
+    Q 72 58 68 58
+    L 68 113
+    Q 68 120 62 123
+    L 20 123
+    Q 14 120 14 113
+    L 14 28
+    Q 14 20 20 16
+    Q 26 13 31 11
+    L 31 9
+    Q 31 7 33 7
     Z
-    M 73 43
-    Q 72 43 72 44
-    L 72 62
-    Q 72 63 73 63
-    L 77 63
-    Q 78 63 78 62
-    L 78 44
-    Q 78 43 77 43
+    M 72 30
+    Q 70 30 70 32
+    L 70 50
+    Q 70 52 72 52
+    L 80 52
+    Q 82 52 82 50
+    L 82 32
+    Q 82 30 80 30
     Z
   `;
 }
