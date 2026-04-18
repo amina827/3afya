@@ -32,20 +32,20 @@ interface QualityChecks {
 }
 
 // Frame guide position (centered, normalized 0-1 of viewBox 100×133)
-// Full bottle bounding box: x=12..86, y=7..123 → w=74, h=116
-// Volume range (1500ml at shoulder, 0ml at base): y=19..123
+// Full bottle bounding box (with handle): x=12..80, y=7..123 → w=68, h=116
+// Volume range (1500ml at shoulder line, 0ml at base line): y=22..113
 const FRAME = {
-  cx: 49 / 100,     // (12+86)/2 / 100 = 0.49
+  cx: 46 / 100,     // (12+80)/2 / 100 = 0.46
   cy: 65 / 133,     // (7+123)/2 / 133 ≈ 0.489
-  width: 74 / 100,   // 0.74
+  width: 68 / 100,   // 0.68
   height: 116 / 133, // ≈ 0.872
 };
 
 // The volume range within the frame (where ml/% markers go)
-// Fill-level line (1500 cc) is at the shoulder: y≈19
-// Base: y≈123
-const VOLUME_TOP_Y = 19;
-const VOLUME_BOTTOM_Y = 123;
+// Fill-level line (1500 cc) is at the shoulder: y≈22
+// Base line (oil column bottom): y≈113
+const VOLUME_TOP_Y = 22;
+const VOLUME_BOTTOM_Y = 113;
 
 // Quality thresholds
 const MIN_BRIGHTNESS = 0.45;
@@ -707,10 +707,10 @@ export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
           {/* Stage indicator: highlight neck (top) or base (bottom) */}
           {captureStage === 'neck' && (
             <g>
-              {/* Band at the cap/neck area (y=7 to y=19) */}
+              {/* Band at the cap/neck area (y=7 to y=17) */}
               <rect
-                x="26" y="7"
-                width="32" height="12"
+                x="27" y="7"
+                width="30" height="10"
                 fill="rgba(34, 197, 94, 0.15)"
                 stroke="#22c55e"
                 strokeWidth="0.6"
@@ -733,14 +733,14 @@ export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
               {/* Band at the base area (y=113 to y=123) */}
               <rect
                 x="12" y="113"
-                width="57" height="10"
+                width="60" height="10"
                 fill="rgba(34, 197, 94, 0.15)"
                 stroke="#22c55e"
                 strokeWidth="0.6"
                 strokeDasharray="2 1"
               />
               <text
-                x="40" y="131"
+                x="42" y="131"
                 fontSize="3.5"
                 fill="#22c55e"
                 textAnchor="middle"
@@ -1016,70 +1016,83 @@ function QualityChip({
 }
 
 // ============================================================
-// SVG path for the Afia 1.5L bottle — from ENGINEERING DRAWING
+// SVG path for the Afia 1.5L bottle — traced from ENGINEERING DRAWING
 //
 // Actual dimensions (mm):
 //   Total height:   301 ± 1.2
-//   Cap diameter:   Ø 37.3 ± 0.5  (38mm neck finish)
-//   Neck height:    22 (16.5 + 5.5)
-//   Shoulder width: 52.5
+//   Cap diameter:   Ø 37.3 ± 0.5   (38mm neck finish, threaded)
+//   Cap thread h:   16.5
+//   R4 ring flare:  ~4 (neck collar)
+//   Straight neck:  5.5
+//   Shoulder ref:   52.5 (width at mid-shoulder)
 //   Body width:     70
 //   Base width:     78.1
-//   Handle:         right side, ~25-60% height
+//   Base rim:       16
+//   Handle:         integrated on the right side
 //
-// Proportions:
-//   cap/base width:      37.3 / 78.1 = 47.8 %
-//   shoulder/base width: 52.5 / 78.1 = 67.2 %
-//   body/base width:     70   / 78.1 = 89.6 %
-//   neck height:         22   / 301  =  7.3 %
-//   base height:         16   / 301  =  5.3 %
+// Mapped to viewBox 100 × 133 (centered at x=42 for body):
+//   Cap / neck width  → 28 units (x 28..56)  — 37.3 / 78.1
+//   Body width        → 56 units (x 14..70)  — ~70 / 78.1 (body straight walls)
+//   Base width        → 60 units (x 12..72)  — 78.1 / 78.1 (slight flare)
+//   Handle outer ext  → x=80 (10 units beyond body right at x=70)
 //
-// Mapped to viewBox 100 × 133:
-//   Base width  → 60 units (x 12..72)
-//   Cap width   → 29 units (x 28..57)  — 47.8 %
-//   Shoulder    → 40 units (x 22..62)  — 67.2 %
-//   Body middle → 54 units (x 15..69)  — 89.6 %
-//   Handle      → extends to x 86
+// Vertical segments (y):
+//   7..12  cap / thread section (16.5mm)
+//   12..15 R4 ring flare (neck collar)
+//   15..17 short straight neck (5.5mm)
+//   17..31 shoulder transition (distinctive straight diagonal lines on both sides)
+//   31..113 main body (straight walls)
+//   113..123 base (slight outward flare with rounded corners)
 //
-// Fill-level mark (1500 cc) ≈ y 19 (shoulder line)
-// Bounds: x 12..86, y 7..123
+// Handle on right:
+//   37..70 outer extent (x=80)
+//   43..63 inner grip hole (x=72..78)
+//
+// Fill-level mark (1500 cc) ≈ y 22 (just below shoulder top)
+// Bounds: x 12..80, y 7..123
 // ============================================================
 function getBottlePath(): string {
   return `
     M 30 7
     L 54 7
     Q 56 7 56 9
-    L 56 13
-    Q 56 15 54 15
-    L 54 19
-    Q 58 23 62 28
-    Q 67 34 69 42
-    L 69 30
-    Q 73 26 78 26
-    Q 86 26 86 36
-    L 86 68
-    Q 86 78 78 78
-    Q 73 78 69 74
-    L 69 113
-    Q 69 121 62 123
-    L 18 123
-    Q 12 121 12 113
-    L 12 42
-    Q 12 32 18 26
-    Q 24 20 30 18
-    L 30 15
-    Q 28 15 28 13
+    L 56 12
+    Q 57 12 57 13.5
+    Q 57 15 56 15
+    L 56 17
+    Q 58 19 60 22
+    L 67 31
+    Q 70 34 70 37
+    Q 76 37 80 43
+    L 80 61
+    Q 80 67 76 69
+    Q 72 70 70 70
+    L 70 113
+    Q 72 113 72 115
+    L 72 119
+    Q 72 123 68 123
+    L 16 123
+    Q 12 123 12 119
+    L 12 115
+    Q 12 113 14 113
+    L 14 37
+    Q 14 34 16 32
+    L 25 22
+    Q 27 19 28 17
+    L 28 15
+    Q 27 15 27 13.5
+    Q 27 12 28 12
     L 28 9
     Q 28 7 30 7
     Z
-    M 72 32
-    Q 72 30 74 30
-    L 82 30
-    Q 84 30 84 32
-    L 84 72
-    Q 84 74 82 74
-    L 74 74
-    Q 72 74 72 72
+    M 73 43
+    Q 72 43 72 44
+    L 72 62
+    Q 72 63 73 63
+    L 77 63
+    Q 78 63 78 62
+    L 78 44
+    Q 78 43 77 43
     Z
   `;
 }
