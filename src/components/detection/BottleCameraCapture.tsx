@@ -35,10 +35,10 @@ interface QualityChecks {
 // Full bottle bounding box (with handle): x=14..84, y=7..123 → w=70, h=116
 // Volume range (1500ml at shoulder line, 0ml at base line): y=20..113
 const FRAME = {
-  cx: 49 / 100,     // (14+84)/2 / 100 = 0.49
-  cy: 65 / 133,     // (7+123)/2 / 133 ≈ 0.489
-  width: 70 / 100,   // 0.70
-  height: 116 / 133, // ≈ 0.872
+  cx: 0.49,
+  cy: 0.50,
+  width: 0.68,
+  height: 0.88,
 };
 
 // The volume range within the frame (where ml/% markers go)
@@ -52,7 +52,7 @@ const MIN_BRIGHTNESS = 0.45;
 const MIN_SHARPNESS = 0.40;
 const MIN_MOTION_STABILITY = 0.70;
 const MIN_TILT_OK = 0.75;
-const MIN_ALIGN_SCORE = 0.78;
+const MIN_ALIGN_SCORE = 0.82;
 const STABLE_FRAMES_REQUIRED = 8; // ~1.6s of consecutive aligned frames
 
 export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
@@ -259,7 +259,7 @@ export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
         width: bbW / w,
         height: bbH / h,
         fillRatio,
-        hasLabel: labelDensity > 0.005,
+        hasLabel: labelDensity > 0.008,
         yellowCount,
         centroidTop: minY / h,
         centroidBottom: maxY / h,
@@ -1039,34 +1039,40 @@ function QualityChip({
 // ============================================================
 function getBottlePath(): string {
   return `
-    M 33 7
-    L 49 7
-    Q 51 7 51 9
-    L 51 13
-    Q 54 14 60 15
-    Q 73 15 80 23
-    Q 84 29 84 35
-    L 84 50
-    Q 84 56 78 57
-    Q 72 58 68 58
-    L 68 113
-    Q 68 120 62 123
-    L 20 123
-    Q 14 120 14 113
-    L 14 28
-    Q 14 20 20 16
-    Q 26 13 31 11
-    L 31 9
-    Q 31 7 33 7
+    M 34 6
+    L 50 6
+    Q 52 6 52 8
+    L 52 12
+
+    Q 52 15 58 17
+    Q 70 20 78 28
+    Q 82 34 82 40
+
+    L 82 55
+    Q 82 60 76 62
+    Q 72 63 68 63
+
+    L 68 108
+    Q 68 118 60 122
+    L 22 122
+    Q 14 118 14 108
+
+    L 14 35
+    Q 14 25 22 20
+    Q 28 17 32 14
+
+    L 32 8
+    Q 32 6 34 6
     Z
-    M 72 30
-    Q 70 30 70 32
-    L 70 50
-    Q 70 52 72 52
-    L 80 52
-    Q 82 52 82 50
-    L 82 32
-    Q 82 30 80 30
+
+    M 72 32
+    Q 70 32 70 34
+    L 70 52
+    Q 70 54 72 54
+    L 79 54
+    Q 81 54 81 52
+    L 81 34
+    Q 81 32 79 32
     Z
   `;
 }
