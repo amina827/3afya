@@ -27,7 +27,9 @@ export function OilBottleSlider({
   const { lang } = useLanguage();
   const [ml, setMl] = useState<number>(initialMl ?? totalMl);
   const [isDragging, setIsDragging] = useState(false);
+  const [isSliderDragging, setIsSliderDragging] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
+  const sliderTrackRef = useRef<HTMLDivElement>(null);
 
   const totalSteps = Math.round(totalMl / stepMl); // 15
   const ratio = ml / totalMl;
@@ -93,11 +95,44 @@ export function OilBottleSlider({
     setIsDragging(false);
   };
 
-  // Quick increment/decrement
-  const adjust = (delta: number) => {
-    const newMl = Math.max(0, Math.min(totalMl, ml + delta));
+  // Horizontal slider (below the bottle) — pointer X → ml (snapped)
+  const sliderPointerToMl = useCallback(
+    (clientX: number): number => {
+      const track = sliderTrackRef.current;
+      if (!track) return ml;
+      const rect = track.getBoundingClientRect();
+      const relativeX = clientX - rect.left;
+      const clampedX = Math.max(0, Math.min(rect.width, relativeX));
+      const newRatio = clampedX / rect.width;
+      const rawMl = newRatio * totalMl;
+      const snapped = Math.round(rawMl / stepMl) * stepMl;
+      return Math.max(0, Math.min(totalMl, snapped));
+    },
+    [ml, totalMl, stepMl],
+  );
+
+  const handleSliderPointerDown = (e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setIsSliderDragging(true);
+    const newMl = sliderPointerToMl(e.clientX);
     setMl(newMl);
     onChange?.(newMl);
+  };
+
+  const handleSliderPointerMove = (e: React.PointerEvent) => {
+    if (!isSliderDragging) return;
+    const newMl = sliderPointerToMl(e.clientX);
+    if (newMl !== ml) {
+      setMl(newMl);
+      onChange?.(newMl);
+    }
+  };
+
+  const handleSliderPointerUp = (e: React.PointerEvent) => {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+    setIsSliderDragging(false);
   };
 
   // Generate tick marks (16 ticks: 0, 100, 200, ..., 1500)
@@ -153,43 +188,6 @@ export function OilBottleSlider({
       </div>
 
       <div className="flex items-stretch justify-center gap-6">
-        {/* Tick scale (left) */}
-        <div className="flex flex-col justify-between py-4 text-right select-none">
-          {ticks.slice().reverse().map((t) => (
-            <button
-              key={t.value}
-              onClick={() => {
-                setMl(t.value);
-                onChange?.(t.value);
-              }}
-              className={`flex items-center gap-2 transition-all ${
-                t.value === ml
-                  ? 'text-gold-700 font-bold scale-110'
-                  : t.isMajor
-                  ? 'text-gold-600 hover:text-gold-700'
-                  : t.isHalf
-                  ? 'text-gold-500/70 hover:text-gold-600'
-                  : 'text-gold-400/50 hover:text-gold-500'
-              }`}
-              type="button"
-            >
-              <span
-                className={`tabular-nums ${
-                  t.isMajor ? 'text-xs font-bold' : t.isHalf ? 'text-[10px]' : 'text-[9px]'
-                }`}
-              >
-                {t.value}
-              </span>
-              <span className="text-[8px] text-gold-400">ml</span>
-              <div
-                className={`bg-gold-400 ${
-                  t.isMajor ? 'h-0.5 w-3' : t.isHalf ? 'h-px w-2' : 'h-px w-1'
-                }`}
-              />
-            </button>
-          ))}
-        </div>
-
         {/* Bottle visualization (center) */}
         <div className="relative" style={{ width: 220, height: 460 }}>
           {/* Track for pointer events (full bottle area) */}
@@ -376,57 +374,123 @@ export function OilBottleSlider({
         </div>
       </div>
 
-      {/* Quick step buttons */}
-      <div className="flex items-center justify-center gap-3 mt-6">
-        <button
-          onClick={() => adjust(-stepMl)}
-          disabled={ml <= 0}
-          className="bg-gold-100 hover:bg-gold-200 disabled:opacity-40 disabled:cursor-not-allowed text-gold-800 w-10 h-10 rounded-full font-bold text-lg flex items-center justify-center shadow-md transition-all active:scale-95"
-          aria-label={lang === 'ar' ? 'إنقاص' : 'Decrease'}
+      {/* Horizontal snap slider (replaces +/- buttons and vertical scale) */}
+      <div className="mt-8 px-2" dir="ltr">
+        <div
+          ref={sliderTrackRef}
+          onPointerDown={handleSliderPointerDown}
+          onPointerMove={handleSliderPointerMove}
+          onPointerUp={handleSliderPointerUp}
+          onPointerCancel={handleSliderPointerUp}
+          className="relative h-14 cursor-grab active:cursor-grabbing touch-none select-none"
+          style={{ touchAction: 'none' }}
         >
-          −
-        </button>
-        <div className="bg-gold-50 border border-gold-200 rounded-xl px-4 py-2 min-w-[100px] text-center">
-          <div className="text-gold-700 text-xs">{lang === 'ar' ? 'الخطوة' : 'Step'}</div>
-          <div className="text-gold-800 text-sm font-bold tabular-nums">
-            {stepMl}ml ({stepCups} {lang === 'ar' ? 'كوب' : 'cup'})
-          </div>
-        </div>
-        <button
-          onClick={() => adjust(stepMl)}
-          disabled={ml >= totalMl}
-          className="bg-gold-100 hover:bg-gold-200 disabled:opacity-40 disabled:cursor-not-allowed text-gold-800 w-10 h-10 rounded-full font-bold text-lg flex items-center justify-center shadow-md transition-all active:scale-95"
-          aria-label={lang === 'ar' ? 'زيادة' : 'Increase'}
-        >
-          +
-        </button>
-      </div>
+          {/* Base track */}
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2 rounded-full bg-gold-100 border border-gold-200 pointer-events-none" />
 
-      {/* Quick presets */}
-      <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
-        {[0, 250, 500, 750, 1000, 1250, 1500].map((preset) => (
-          <button
-            key={preset}
-            onClick={() => {
-              setMl(preset);
-              onChange?.(preset);
+          {/* Filled portion (0 → handle) */}
+          <motion.div
+            className="absolute left-0 top-1/2 -translate-y-1/2 h-2 rounded-full shadow-inner pointer-events-none"
+            style={{
+              width: useTransform(fillRatio, (v) => `${v * 100}%`),
+              backgroundColor: levelColor,
             }}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-              ml === preset
-                ? 'bg-gold-gradient text-white shadow-md'
-                : 'bg-white/60 text-gold-700 hover:bg-gold-100 border border-gold-200'
-            }`}
+          />
+
+          {/* Tick marks */}
+          {ticks.map((t) => {
+            const tPct = (t.value / totalMl) * 100;
+            const active = t.value <= ml;
+            return (
+              <div
+                key={t.value}
+                className="absolute top-1/2 pointer-events-none"
+                style={{ left: `${tPct}%`, transform: 'translate(-50%, -50%)' }}
+              >
+                <div
+                  className={`${
+                    active ? 'bg-white/90' : 'bg-gold-400'
+                  } ${
+                    t.isMajor
+                      ? 'h-4 w-[2px]'
+                      : t.isHalf
+                      ? 'h-3 w-[1.5px]'
+                      : 'h-2 w-px'
+                  } rounded-full`}
+                />
+              </div>
+            );
+          })}
+
+          {/* Handle */}
+          <motion.div
+            className="absolute top-1/2 h-9 w-6 rounded-md shadow-lg bg-white border-2 flex items-center justify-center pointer-events-none"
+            style={{
+              left: useTransform(fillRatio, (v) => `${v * 100}%`),
+              y: '-50%',
+              x: '-50%',
+              borderColor: levelColor,
+            }}
+            animate={{ scale: isSliderDragging ? 1.1 : 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
           >
-            {preset}ml
-          </button>
-        ))}
+            <div className="flex flex-col gap-[2px]">
+              <span className="block w-2.5 h-px bg-gold-400" />
+              <span className="block w-2.5 h-px bg-gold-400" />
+              <span className="block w-2.5 h-px bg-gold-400" />
+            </div>
+            {/* Value bubble above the handle while dragging */}
+            {isSliderDragging && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute -top-8 px-2 py-0.5 rounded-md text-[11px] font-bold text-white shadow-md tabular-nums whitespace-nowrap"
+                style={{ backgroundColor: levelColor }}
+              >
+                {ml}ml
+              </motion.div>
+            )}
+          </motion.div>
+        </div>
+
+        {/* Tick labels (major only) */}
+        <div className="relative h-5 mt-1 text-[11px] text-gold-600">
+          {ticks
+            .filter((t) => t.isMajor)
+            .map((t) => {
+              const tPct = (t.value / totalMl) * 100;
+              return (
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => {
+                    setMl(t.value);
+                    onChange?.(t.value);
+                  }}
+                  className={`absolute top-0 -translate-x-1/2 px-1 font-semibold tabular-nums transition-colors ${
+                    t.value === ml ? 'text-gold-800' : 'hover:text-gold-700'
+                  }`}
+                  style={{ left: `${tPct}%` }}
+                >
+                  {t.value}
+                </button>
+              );
+            })}
+        </div>
+        <div className="text-center text-[10px] text-gold-500 mt-1">
+          <span>
+            {lang === 'ar'
+              ? `الخطوة: ${stepMl}ml (${stepCups} كوب)`
+              : `Step: ${stepMl}ml (${stepCups} cup)`}
+          </span>
+        </div>
       </div>
 
       {/* Hint */}
       <p className="text-center text-gold-500 text-[11px] mt-4">
         {lang === 'ar'
-          ? '💡 اسحب المؤشر لأعلى أو أسفل، أو اضغط على أي قيمة في المسطرة'
-          : '💡 Drag the pointer up/down, or tap any value on the scale'}
+          ? '💡 اسحب المؤشر يمين أو شمال، أو اضغط على أي قيمة أسفل الشريط'
+          : '💡 Drag the handle left/right, or tap any value below the track'}
       </p>
     </div>
   );
