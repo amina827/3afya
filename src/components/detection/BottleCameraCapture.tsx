@@ -1038,41 +1038,43 @@ function QualityChip({
 //   → left shoulder curves smoothly into cap left → cap top-left corner.
 // ============================================================
 function getBottlePath(): string {
+  // Pear/teardrop silhouette matching the technical front-view drawing:
+  //  - narrow neck at top (x=37..49)
+  //  - smooth left shoulder curving outward to wide body
+  //  - integrated handle bulge on upper right with oval grip cut-out
+  //  - lower body tapers gently then flares to wide rounded base
   return `
     M 37 5
     L 49 5
     Q 51 5 51 7
     L 51 11
-    L 52 13
+    Q 52 13 54 14
 
-    Q 82 14 82 32
+    C 66 15 76 20 82 34
+    C 87 48 87 58 84 66
+    C 80 72 74 70 72 76
+    C 73 86 74 96 74 106
+    C 74 116 72 121 68 123
 
-    L 82 64
-
-    Q 82 76 66 76
-
-    L 66 108
-
-    Q 66 120 58 123
     L 22 123
-    Q 14 120 14 108
 
-    L 14 34
-
-    Q 14 12 36 12
+    C 16 123 13 118 12 108
+    C 11 94 11 78 12 64
+    C 13 48 15 34 20 24
+    C 25 16 30 13 36 12
 
     L 36 7
     Q 36 5 37 5
     Z
 
-    M 75 36
-    Q 72 36 72 39
-    L 72 60
-    Q 72 65 75 65
-    L 79 65
-    Q 82 65 82 60
-    L 82 39
-    Q 82 36 79 36
+    M 78 40
+    Q 73 40 73 44
+    L 73 62
+    Q 73 67 78 67
+    L 84 67
+    Q 89 67 89 62
+    L 89 44
+    Q 89 40 84 40
     Z
   `;
 }
