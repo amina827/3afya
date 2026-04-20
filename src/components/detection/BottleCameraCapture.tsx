@@ -1038,43 +1038,55 @@ function QualityChip({
 //   → left shoulder curves smoothly into cap left → cap top-left corner.
 // ============================================================
 function getBottlePath(): string {
-  // Pear/teardrop silhouette matching the technical front-view drawing:
-  //  - narrow neck at top (x=37..49)
-  //  - smooth left shoulder curving outward to wide body
-  //  - integrated handle bulge on upper right with oval grip cut-out
-  //  - lower body tapers gently then flares to wide rounded base
+  // Silhouette derived from bottle_overlay.svg traced onto the real Afia
+  // 1.5 L bottle reference (bottle_ref.png). Key features:
+  //   - short wide neck near top
+  //   - smooth dome shoulder on left curving outward
+  //   - integrated handle bulge on upper right with oval grip cut-out
+  //   - gentle mid-body waist then wider rectangular lower body
+  //   - rounded base corners
+  //
+  // ViewBox 100 x 133. Centre line at x ~ 49.
+  // Bottle x range 12..84, y range 7..123.
   return `
-    M 37 5
-    L 49 5
-    Q 51 5 51 7
-    L 51 11
-    Q 52 13 54 14
+    M 40 7
+    L 58 7
+    Q 60 7 60 9
+    L 60 16
+    Q 61 17 62 18
 
-    C 66 15 76 20 82 34
-    C 87 48 87 58 84 66
-    C 80 72 74 70 72 76
-    C 73 86 74 96 74 106
-    C 74 116 72 121 68 123
+    C 68 20 74 24 77 32
+    C 80 40 81 48 78 55
+    C 75 60 72 60 70 63
 
-    L 22 123
+    C 68 70 65 77 66 84
+    C 68 94 71 104 72 112
+    C 72 118 72 121 70 122
+    Q 68 123 64 123
 
-    C 16 123 13 118 12 108
-    C 11 94 11 78 12 64
-    C 13 48 15 34 20 24
-    C 25 16 30 13 36 12
+    L 26 123
 
-    L 36 7
-    Q 36 5 37 5
+    Q 20 123 18 120
+    C 16 115 15 108 15 100
+    L 15 80
+    C 15 68 16 58 20 52
+
+    C 24 46 26 44 26 42
+
+    C 25 36 28 28 32 22
+    C 35 18 37 16 38 14
+    L 38 9
+    Q 38 7 40 7
     Z
 
-    M 78 40
-    Q 73 40 73 44
-    L 73 62
-    Q 73 67 78 67
-    L 84 67
-    Q 89 67 89 62
-    L 89 44
-    Q 89 40 84 40
+    M 70 40
+    Q 67 40 67 43
+    L 67 58
+    Q 67 62 70 62
+    L 76 62
+    Q 79 62 79 58
+    L 79 43
+    Q 79 40 76 40
     Z
   `;
 }
