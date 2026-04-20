@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>Afia 1.5 L  -  Interactive Fill Level</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Arial, "Segoe UI", Tahoma, sans-serif;
+    background: #f2f2f2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    min-height: 100vh;
+  }
+  h2 { margin: 5px 0 15px; color: #222; }
+  .wrap {
+    display: flex;
+    gap: 40px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .bottle-box {
+    background: #fff;
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+  }
+  .panel {
+    background: #fff;
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    padding: 20px 25px;
+    min-width: 260px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    text-align: center;
+  }
+  .vol-display {
+    font-size: 42px;
+    font-weight: bold;
+    color: #c47200;
+    margin: 6px 0 2px;
+    letter-spacing: 1px;
+  }
+  .vol-unit { font-size: 20px; color: #666; }
+  .pct { font-size: 14px; color: #888; margin-bottom: 18px; }
+  .btns {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  button {
+    font-size: 16px;
+    padding: 10px 18px;
+    border: 1px solid #888;
+    background: #fafafa;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    min-width: 72px;
+    transition: background 0.15s;
+  }
+  button:hover { background: #e8e8e8; }
+  button.minus { color: #a00; border-color: #a00; }
+  button.plus  { color: #080; border-color: #080; }
+  button.reset { color: #005; border-color: #005; }
+  input[type=range] { width: 100%; margin: 8px 0; }
+  .step-note { font-size: 12px; color: #666; margin-top: 6px; }
+  .line-label {
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+    fill: #c00;
+    font-weight: bold;
+  }
+</style>
+</head>
+<body>
+
+<h2>Afia 1.5 L - Interactive Oil Fill Level</h2>
+
+<div class="wrap">
+
+  <!-- ============ BOTTLE SVG ============ -->
+  <div class="bottle-box">
+    <svg id="bottle" viewBox="0 0 600 800" width="400" height="533"
+         xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <!-- clip path = interior of bottle; oil rect is clipped by this -->
+        <clipPath id="interior">
+          <path d="
+            M 236,95
+            L 236,135
+            C 230,138 225,148 222,158
+            C 210,172 190,195 178,225
+            C 165,260 160,300 158,340
+            C 156,360 160,385 172,410
+            C 182,425 186,438 184,452
+            C 180,468 170,480 162,498
+            C 152,520 150,545 150,580
+            L 150,725
+            C 150,748 156,762 170,772
+            L 195,790
+            L 405,790
+            L 430,772
+            C 444,762 450,748 450,725
+            L 450,580
+            C 450,545 448,520 438,498
+            C 430,480 420,468 416,452
+            C 414,438 418,425 428,410
+            C 440,385 444,360 442,340
+            C 440,300 435,260 422,225
+            C 410,195 390,172 378,158
+            C 375,148 370,138 364,135
+            L 364,95
+            Z"/>
+        </clipPath>
+      </defs>
+
+      <!-- ============ OIL FILL (dynamic height, clipped to interior) ============ -->
+      <g clip-path="url(#interior)">
+        <!-- oil rectangle: y + height always ends at base -->
+        <rect id="oil" x="0" y="200" width="600" height="590"
+              fill="#f5c84a"/>
+        <!-- oil surface highlight -->
+        <rect id="oilSurface" x="0" y="200" width="600" height="3"
+              fill="#e8a91a"/>
+      </g>
+
+      <!-- ============ BOTTLE OUTLINE (drawn on top) ============ -->
+      <!-- centre-line -->
+      <line x1="300" y1="80" x2="300" y2="800"
+            stroke="#999" stroke-width="0.8" stroke-dasharray="10 3 2 3"/>
+
+      <!-- neck top rim -->
+      <line x1="236" y1="95" x2="364" y2="95" stroke="#000" stroke-width="2"/>
+      <line x1="236" y1="95" x2="236" y2="135" stroke="#000" stroke-width="2"/>
+      <line x1="364" y1="95" x2="364" y2="135" stroke="#000" stroke-width="2"/>
+      <!-- threads -->
+      <g stroke="#000" stroke-width="0.9" fill="none">
+        <path d="M236,105 Q248,99 260,105 Q272,111 284,105 Q296,99 308,105 Q320,111 332,105 Q344,99 356,105 Q362,108 364,108"/>
+        <path d="M236,115 Q248,109 260,115 Q272,121 284,115 Q296,109 308,115 Q320,121 332,115 Q344,109 356,115 Q362,118 364,118"/>
+        <path d="M236,125 Q248,119 260,125 Q272,131 284,125 Q296,119 308,125 Q320,131 332,125 Q344,119 356,125 Q362,128 364,128"/>
+      </g>
+
+      <!-- dome shoulder left -->
+      <path stroke="#000" stroke-width="2.3" fill="none" d="
+        M 236,135
+        C 225,145 205,168 190,198
+        C 175,228 165,268 160,310
+        C 158,340 162,375 175,410
+        "/>
+      <!-- dome shoulder right -->
+      <path stroke="#000" stroke-width="2.3" fill="none" d="
+        M 364,135
+        C 375,145 395,168 410,198
+        C 425,228 435,268 440,310
+        C 442,340 438,375 425,410
+        "/>
+
+      <!-- waist + lower body left -->
+      <path stroke="#000" stroke-width="2.3" fill="none" d="
+        M 175,410
+        C 182,425 186,438 184,452
+        C 178,468 168,480 160,500
+        C 150,522 148,550 148,585
+        L 148,725
+        C 148,750 156,766 172,778
+        L 200,795
+        L 400,795
+        "/>
+      <!-- waist + lower body right -->
+      <path stroke="#000" stroke-width="2.3" fill="none" d="
+        M 425,410
+        C 418,425 414,438 416,452
+        C 422,468 432,480 440,500
+        C 450,522 452,550 452,585
+        L 452,725
+        C 452,750 444,766 428,778
+        L 400,795
+        "/>
+
+      <!-- integrated handle on right -->
+      <path stroke="#000" stroke-width="2.3" fill="none" d="
+        M 440,310
+        C 478,320 510,345 524,380
+        C 538,418 536,455 520,478
+        C 508,494 488,496 470,486
+        C 455,478 448,465 443,450
+        "/>
+      <!-- grip cutout -->
+      <path stroke="#000" stroke-width="1.8" fill="#ffffff" d="
+        M 478,355
+        C 495,350 510,372 514,398
+        C 518,428 516,458 504,475
+        C 494,488 478,488 468,478
+        C 458,465 456,442 458,418
+        C 460,390 464,365 478,355 Z
+        "/>
+
+      <!-- diagonal label edge -->
+      <path stroke="#000" stroke-width="0.9" fill="none" d="M 175,370 Q 300,440 425,500"/>
+
+      <!-- 4 grip ribs -->
+      <g stroke="#000" stroke-width="1.0" fill="none">
+        <rect x="198" y="560" width="204" height="8" rx="4"/>
+        <rect x="198" y="590" width="204" height="8" rx="4"/>
+        <rect x="198" y="620" width="204" height="8" rx="4"/>
+        <rect x="198" y="650" width="204" height="8" rx="4"/>
+      </g>
+
+      <!-- base feet -->
+      <g stroke="#000" stroke-width="1.1" fill="none">
+        <path d="M210,795 q8,-10 24,-10 q16,0 24,10"/>
+        <path d="M275,795 q8,-10 24,-10 q16,0 24,10"/>
+        <path d="M340,795 q8,-10 24,-10 q16,0 24,10"/>
+      </g>
+
+      <!-- ============ DYNAMIC FILL-LEVEL INDICATOR ============ -->
+      <!-- The horizontal dashed line + label move up/down with the oil -->
+      <g id="indicator">
+        <line id="fillLine" x1="50" y1="200" x2="560" y2="200"
+              stroke="#c00" stroke-width="1.5" stroke-dasharray="10 3 2 3"/>
+        <text id="fillLabel" x="470" y="195" class="line-label">1500 cc</text>
+        <polygon id="arrowL" points="50,200 62,195 62,205"
+                 fill="#c00"/>
+        <polygon id="arrowR" points="560,200 548,195 548,205"
+                 fill="#c00"/>
+      </g>
+
+    </svg>
+  </div>
+
+  <!-- ============ CONTROL PANEL ============ -->
+  <div class="panel">
+    <div class="vol-display"><span id="volVal">1500</span><span class="vol-unit"> ml</span></div>
+    <div class="pct"><span id="pctVal">100</span>% full</div>
+
+    <div class="btns">
+      <button class="minus" onclick="adjust(-100)">- 100 ml</button>
+      <button class="plus"  onclick="adjust(+100)">+ 100 ml</button>
+    </div>
+    <div class="btns">
+      <button class="minus" onclick="adjust(-50)">- 50 ml</button>
+      <button class="plus"  onclick="adjust(+50)">+ 50 ml</button>
+      <button class="reset" onclick="setVol(1500)">Reset</button>
+    </div>
+
+    <input type="range" id="slider" min="0" max="1521" step="10" value="1500"
+           oninput="setVol(parseInt(this.value))">
+    <div class="step-note">Slider step = 10 ml &nbsp;|&nbsp; Max fill = 1500 +21 / 0</div>
+    <div class="step-note" style="margin-top:10px; color:#c00;">
+      Full: y = 200 px &nbsp;|&nbsp; Empty: y = 790 px
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Map volume (ml) -> y coordinate of oil surface
+  //   1500 ml -> y = 200  (the fill-level dashed line)
+  //      0 ml -> y = 790  (bottom interior)
+  const MAX_VOL   = 1500;
+  const Y_FULL    = 200;   // y at 1500 ml (fill-level line)
+  const Y_EMPTY   = 790;   // y at 0 ml (inside base)
+
+  const oil       = document.getElementById('oil');
+  const oilSurf   = document.getElementById('oilSurface');
+  const fillLine  = document.getElementById('fillLine');
+  const fillLbl   = document.getElementById('fillLabel');
+  const arrowL    = document.getElementById('arrowL');
+  const arrowR    = document.getElementById('arrowR');
+  const volVal    = document.getElementById('volVal');
+  const pctVal    = document.getElementById('pctVal');
+  const slider    = document.getElementById('slider');
+
+  let current = 1500;
+
+  function volToY(v) {
+    // clamp
+    if (v < 0)          v = 0;
+    if (v > MAX_VOL+21) v = MAX_VOL+21;
+    // linear interpolation
+    return Y_FULL + (Y_EMPTY - Y_FULL) * (1 - v / MAX_VOL);
+  }
+
+  function setVol(v) {
+    if (v < 0)          v = 0;
+    if (v > MAX_VOL+21) v = MAX_VOL+21;
+    current = v;
+
+    const y = volToY(v);
+
+    // oil rectangle: top at y, height to base
+    oil.setAttribute('y', y);
+    oil.setAttribute('height', Y_EMPTY - y + 10);
+
+    // oil surface line
+    oilSurf.setAttribute('y', y - 1);
+
+    // indicator line + label
+    fillLine.setAttribute('y1', y);
+    fillLine.setAttribute('y2', y);
+    fillLbl.setAttribute('y', y - 5);
+    fillLbl.textContent = v + ' cc';
+    arrowL.setAttribute('points', `50,${y} 62,${y-5} 62,${y+5}`);
+    arrowR.setAttribute('points', `560,${y} 548,${y-5} 548,${y+5}`);
+
+    // display
+    volVal.textContent = v;
+    pctVal.textContent = Math.round(v / MAX_VOL * 100);
+    slider.value = v;
+  }
+
+  function adjust(delta) {
+    setVol(current + delta);
+  }
+
+  // init
+  setVol(1500);
+</script>
+
+</body>
+</html>
