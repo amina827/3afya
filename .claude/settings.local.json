@@ -21,7 +21,8 @@
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:5500/bottle_overlay.svg)",
       "Bash(cmd.exe *)",
       "Bash(git show *)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(npm run *)"
     ]
   }
 }
