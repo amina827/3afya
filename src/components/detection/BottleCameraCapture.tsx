@@ -1051,9 +1051,9 @@ function getBottlePath(): string {
   // ViewBox 100 x 133. Body centre line at x ≈ 42.
   // Bottle x range 16..76 (with handle), y range 7..123.
   return `
-    M 35 7
-    L 51 7
-    Q 51 7 51 10
+    M 35 1
+    L 51 1
+    Q 51 1 51 10
     C 53 11 54 12 58 17
 
     C 61 20 63 27 63 34
@@ -1074,8 +1074,8 @@ function getBottlePath(): string {
     C 27 43 26 38 25 34
 
     C 18 27 26 13 34 10
-    L 36 9.5
-    Q 36 7 35 7
+    L 35 9.5
+    Q 36 1 35 1
     Z
 
     M 63 34

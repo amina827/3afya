@@ -4,9 +4,9 @@
      stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round">
   <rect width="100" height="133" fill="#111"/>
   <path stroke="#00ff7f" stroke-width="0.6" d="
-    M 35 7
-    L 51 7
-    Q 51 7 51 10
+    M 35 1
+    L 51 1
+    Q 51 1 51 10
     C 53 11 54 12 58 17
     C 61 20 63 27 63 34
     Q 54 38 55 46
@@ -21,8 +21,8 @@
     C 20 66 24 55 26 48
     C 27 43 26 38 25 34
     C 18 27 26 13 34 10
-    L 36 9.5
-    Q 36 7 35 7 Z
+    L 35 9.5
+    Q 36 1 35 1 Z
     M 63 34
     Q 54 38 55 46
     L 54.5 57
