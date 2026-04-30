@@ -32,12 +32,12 @@ interface QualityChecks {
 }
 
 // Frame guide position (centered, normalized 0-1 of viewBox 100×133)
-// Full bottle bounding box (with handle): x=14..84, y=7..123 → w=70, h=116
+// Full bottle bounding box (with handle): x=16..76, y=7..123 → w=60, h=116
 // Volume range (1500ml at shoulder line, 0ml at base line): y=20..113
 const FRAME = {
-  cx: 0.49,
+  cx: 0.46,
   cy: 0.50,
-  width: 0.68,
+  width: 0.62,
   height: 0.88,
 };
 
@@ -699,8 +699,8 @@ export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
           />
           {(alignState === 'aligned' || alignState === 'capturing') && (
             <>
-              <circle cx="41" cy="7" r="1.5" fill={frameColor} />
-              <circle cx="41" cy="123" r="1.5" fill={frameColor} />
+              <circle cx="43" cy="7" r="1.5" fill={frameColor} />
+              <circle cx="43" cy="123" r="1.5" fill={frameColor} />
             </>
           )}
 
@@ -709,15 +709,15 @@ export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
             <g>
               {/* Band at the cap/neck area (y=7 to y=14) */}
               <rect
-                x="31" y="7"
-                width="20" height="7"
+                x="33" y="7"
+                width="22" height="7"
                 fill="rgba(34, 197, 94, 0.15)"
                 stroke="#22c55e"
                 strokeWidth="0.6"
                 strokeDasharray="2 1"
               />
               <text
-                x="41" y="5"
+                x="43" y="5"
                 fontSize="3.5"
                 fill="#22c55e"
                 textAnchor="middle"
@@ -732,15 +732,15 @@ export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
             <g>
               {/* Band at the base area (y=113 to y=123) */}
               <rect
-                x="14" y="113"
-                width="54" height="10"
+                x="16" y="113"
+                width="52" height="10"
                 fill="rgba(34, 197, 94, 0.15)"
                 stroke="#22c55e"
                 strokeWidth="0.6"
                 strokeDasharray="2 1"
               />
               <text
-                x="41" y="131"
+                x="43" y="131"
                 fontSize="3.5"
                 fill="#22c55e"
                 textAnchor="middle"
@@ -1018,74 +1018,73 @@ function QualityChip({
 // ============================================================
 // SVG path for the Afia 1.5L bottle — matching the real bottle silhouette.
 //
-// Shape: narrow cap at top, smooth curved shoulder, rectangular body
-// with rounded base, and an integrated loop handle on the upper-right
-// (the handle branches off right below the cap and reattaches ~40%
-// down the body, forming a grip loop with an oval hole inside).
+// Traced from bottle_overlay.svg (1000×1500) scaled to viewBox 100×133.
+// Key features:
+//   - narrow cap/neck centered on body (x≈34..52)
+//   - dome shoulder on left, handle loop on upper-right
+//   - subtle waist then wider lower body
+//   - rounded base corners
 //
 // Mapped to viewBox 100 × 133:
-//   Cap / neck:     x=33..51 (width 18)  y=7..13
-//   Body:           x=14..68 (width 54)  y=28..113
-//   Base rounded:   y=113..123 (rounded corners)
-//   Handle outer:   extends to x=84,     y=14..58
-//   Grip hole:      x=70..82, y=30..52
+//   Cap / neck:     x=34..52 (width 18)  y=7..14
+//   Body:           x=16..68 (width 52)  y=34..121
+//   Base rounded:   y=121..123 (rounded corners)
+//   Handle outer:   extends to x≈76,     y=17..67
+//   Grip hole:      x=67..75, y=42..60
 //
 // Silhouette flow (clockwise from cap top-left):
-//   cap top → cap top-right corner → cap right → right shoulder
-//   curves OUT and UP into the handle loop → handle top → handle right
-//   → handle bottom curves back IN to body right edge → body right down
-//   → base right corner → base bottom → base left corner → body left up
-//   → left shoulder curves smoothly into cap left → cap top-left corner.
+//   cap top → cap top-right corner → neck right → right shoulder
+//   curves OUT into handle loop → handle outer → handle bottom
+//   curves back IN to body right → body right down → base right
+//   corner → base bottom → base left corner → body left up
+//   → left waist → left shoulder → neck left → cap top-left.
 // ============================================================
 function getBottlePath(): string {
   // Silhouette derived from bottle_overlay.svg traced onto the real Afia
   // 1.5 L bottle reference (bottle_ref.png). Key features:
-  //   - short wide neck near top
+  //   - narrow cap centered on body
   //   - smooth dome shoulder on left curving outward
-  //   - integrated handle bulge on upper right with oval grip cut-out
-  //   - gentle mid-body waist then wider rectangular lower body
+  //   - handle bulge on upper-right with oval grip cut-out
+  //   - subtle mid-body waist then wider lower body
   //   - rounded base corners
   //
-  // ViewBox 100 x 133. Centre line at x ~ 49.
-  // Bottle x range 12..84, y range 7..123.
+  // ViewBox 100 x 133. Body centre line at x ≈ 42.
+  // Bottle x range 16..76 (with handle), y range 7..123.
   return `
-    M 40 7
-    L 58 7
-    Q 60 7 60 9
-    L 60 16
-    Q 61 17 62 18
+    M 35 7
+    L 51 7
+    Q 51 7 51 10
+    C 53 11 54 12 58 17
 
-    C 68 20 74 24 77 32
-    C 80 40 81 48 78 55
-    C 75 60 72 60 70 63
+    C 61 20 63 27 63 34
+    Q 54 38 55 46
+    L 54.5 57
+    C 52 62 62 65 63 67
 
-    C 70 72 71 84 71 96
-    C 71 108 71 116 69 120
-    Q 67 123 63 123
+    Q 68 70 68.5 76
+    L 68.3 85
+    L 68.5 94
+    C 68 108 64 116 59 119
 
-    L 26 123
+    L 32 119
 
-    Q 20 123 18 120
-    C 16 115 15 108 15 100
-    L 15 80
-    C 15 68 16 58 20 52
+    C 26 119 16 98 19 78
+    C 22 66 24 55 26 48
 
-    C 24 46 26 44 26 42
+    C 27 43 26 38 25 34
 
-    C 25 36 28 28 32 22
-    C 35 18 37 16 38 14
-    L 38 9
-    Q 38 7 40 7
+    C 18 27 26 13 34 10
+    L 36 9.5
+    Q 36 7 35 7
     Z
 
-    M 70 40
-    Q 67 40 67 43
-    L 67 58
-    Q 67 62 70 62
-    L 76 62
-    Q 79 62 79 58
-    L 79 43
-    Q 79 40 76 40
+    M 63 34
+    Q 54 38 55 46
+    L 54.5 57
+    Q 54.5 62 62 65
+    C 68 66 68 62 67 56
+    L 67 45
+    Q 65 34 65 34
     Z
   `;
 }
