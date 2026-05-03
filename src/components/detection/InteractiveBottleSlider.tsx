@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useSpring, useTransform } from 'framer-motion';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { BottleBBox } from '@/services/api';
 
@@ -16,8 +16,24 @@ interface InteractiveBottleSliderProps {
   onConfirm?: (ml: number) => void;
 }
 
+// Offsets to trim the bounding box to just the oil column area
 const OIL_COLUMN_TOP_OFFSET = 0.04;
 const OIL_COLUMN_BOTTOM_OFFSET = 0.02;
+
+// How many cup steps are available (e.g. stepMl=100, cupMl=200 → step = 0.5 cups)
+function buildSteps(maxCups: number, cupStep: number) {
+  const steps: { cups: number; label: string; arLabel: string }[] = [];
+  let c = 0;
+  while (c <= maxCups + 0.001) {
+    steps.push({
+      cups: c,
+      label: formatCupFraction(c),
+      arLabel: arabicCupLabel(c),
+    });
+    c = Math.round((c + cupStep) * 100) / 100;
+  }
+  return steps;
+}
 
 export function InteractiveBottleSlider({
   imageUrl,
@@ -31,98 +47,136 @@ export function InteractiveBottleSlider({
 }: InteractiveBottleSliderProps) {
   const { lang } = useLanguage();
   const imgRef = useRef<HTMLImageElement>(null);
-  const [imgRect, setImgRect] = useState<DOMRect | null>(null);
-  const [selectedCups, setSelectedCups] = useState(0);
+  const [imgReady, setImgReady] = useState(false);
+  const [imgNaturalSize, setImgNaturalSize] = useState({ w: 1, h: 1 });
+  const [imgDisplaySize, setImgDisplaySize] = useState({ w: 1, h: 1 });
   const [confirmed, setConfirmed] = useState(false);
 
+  // cupStep in cup units (e.g. 0.5 if stepMl=100 and cupMl=200)
   const cupStep = stepMl / cupMl;
-  const maxCups = Math.max(0, Math.floor((initialMl / cupMl) / cupStep) * cupStep);
-  const selectedMl = selectedCups * cupMl;
-  const startRatio = initialMl / totalMl;
-  const lineMl = Math.max(0, initialMl - selectedMl);
+
+  // Maximum cups that can be measured downward from the oil surface
+  // (can't go below the bottle bottom, i.e. can't exceed initialMl worth of travel)
+  const maxCups = Math.floor((initialMl / cupMl) / cupStep) * cupStep;
+
+  const steps = buildSteps(maxCups, cupStep);
+
+  // slider index (integer 0..steps.length-1)
+  const [sliderIndex, setSliderIndex] = useState(0);
+  const selectedCups = steps[sliderIndex]?.cups ?? 0;
+  const selectedMl = Math.round(selectedCups * cupMl);
+
+  // --- Geometry helpers ---
 
   const computeBbox = useCallback(() => {
     const img = imgRef.current;
-    if (!img) return null;
-    const rect = img.getBoundingClientRect();
-    if (rect.width === 0) return null;
+    if (!img || !imgReady) return null;
 
+    const rect = img.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+
+    // Scale from natural image pixels → displayed pixels
     const scaleX = rect.width / bottleBbox.image_w;
     const scaleY = rect.height / bottleBbox.image_h;
 
-    return {
-      x: bottleBbox.x * scaleX,
-      y: bottleBbox.y * scaleY,
-      w: bottleBbox.w * scaleX,
-      h: bottleBbox.h * scaleY,
-      oilTopY: bottleBbox.y * scaleY + bottleBbox.h * scaleY * OIL_COLUMN_TOP_OFFSET,
-      oilBottomY: bottleBbox.y * scaleY + bottleBbox.h * scaleY * (1 - OIL_COLUMN_BOTTOM_OFFSET),
-    };
-  }, [bottleBbox]);
+    const bx = bottleBbox.x * scaleX;
+    const by = bottleBbox.y * scaleY;
+    const bw = bottleBbox.w * scaleX;
+    const bh = bottleBbox.h * scaleY;
 
+    // The vertical range of the "oil column" inside the bottle bbox
+    const oilTopY    = by + bh * OIL_COLUMN_TOP_OFFSET;
+    const oilBottomY = by + bh * (1 - OIL_COLUMN_BOTTOM_OFFSET);
+    const oilRange   = oilBottomY - oilTopY; // pixels per totalMl
+
+    // Detected oil surface Y — this is the FIXED reference point
+    // initialMl tells us how much oil is in the bottle, so the surface is
+    // at distance (initialMl / totalMl) * oilRange above oilBottomY.
+    const surfaceY = oilBottomY - (initialMl / totalMl) * oilRange;
+
+    return { bx, by, bw, bh, oilTopY, oilBottomY, oilRange, surfaceY, rect };
+  }, [bottleBbox, initialMl, totalMl, imgReady]);
+
+  // Track display size for re-render on resize
   useEffect(() => {
-    const updateRect = () => {
+    const updateSize = () => {
       const img = imgRef.current;
-      if (img) setImgRect(img.getBoundingClientRect());
+      if (!img) return;
+      const rect = img.getBoundingClientRect();
+      setImgDisplaySize({ w: rect.width, h: rect.height });
     };
 
-    updateRect();
-
-    const observer = new ResizeObserver(updateRect);
-    if (imgRef.current) observer.observe(imgRef.current);
-    window.addEventListener('resize', updateRect);
-
+    updateSize();
+    const ro = new ResizeObserver(updateSize);
+    if (imgRef.current) ro.observe(imgRef.current);
+    window.addEventListener('resize', updateSize);
     return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updateRect);
+      ro.disconnect();
+      window.removeEventListener('resize', updateSize);
     };
   }, []);
 
   const handleImgLoad = () => {
     const img = imgRef.current;
-    if (img) setImgRect(img.getBoundingClientRect());
+    if (!img) return;
+    setImgNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+    const rect = img.getBoundingClientRect();
+    setImgDisplaySize({ w: rect.width, h: rect.height });
+    setImgReady(true);
   };
 
-  const bbox = computeBbox();
-  void imgRect;
+  // Framer Motion spring for the animated measurement line Y position
+  const springY = useSpring(0, { stiffness: 260, damping: 28 });
 
-  const sliderToMl = (nextCups: number) => {
-    const clamped = Math.max(0, Math.min(maxCups, nextCups));
-    const snapped = Math.round(clamped / cupStep) * cupStep;
-    setSelectedCups(snapped);
+  const bbox = computeBbox();
+  void imgNaturalSize; // referenced to trigger re-compute when natural size changes
+
+  // Compute the Y position of the measurement line:
+  // surfaceY + (selectedMl / totalMl) * oilRange
+  // As selectedMl grows → measuredY moves downward (larger Y value).
+  let measuredY = 0;
+  if (bbox) {
+    const downwardPx = (selectedMl / totalMl) * bbox.oilRange;
+    measuredY = Math.min(bbox.oilBottomY, bbox.surfaceY + downwardPx);
+  }
+
+  useEffect(() => {
+    if (bbox) springY.set(measuredY);
+  }, [measuredY, bbox, springY]);
+
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const idx = Number(e.target.value);
+    setSliderIndex(idx);
     setConfirmed(false);
-    onChange?.(Math.max(0, initialMl - snapped * cupMl));
+    const cups = steps[idx]?.cups ?? 0;
+    // Report the remaining oil level (oil surface level minus cups taken)
+    onChange?.(Math.max(0, initialMl - cups * cupMl));
   };
 
   const handleConfirm = () => {
     setConfirmed(true);
-    onConfirm?.(lineMl);
+    onConfirm?.(Math.max(0, initialMl - selectedMl));
   };
 
-  const cupTicks = Array.from({ length: Math.floor(maxCups / cupStep) + 1 }, (_, i) => {
-    const value = Number((i * cupStep).toFixed(2));
-    return {
-      cupsValue: value,
-      mlValue: Math.round(value * cupMl),
-      label: formatCupFraction(value),
-      arLabel: arabicCupLabel(value),
-    };
-  });
-
-  const highlightedCupLabel = lang === 'ar'
-    ? arabicCupLabel(selectedCups)
-    : `${formatCupFraction(selectedCups)} cup`;
+  const arLabel  = arabicCupLabel(selectedCups);
+  const enLabel  = `${formatCupFraction(selectedCups)} cup`;
+  const cupLabel = lang === 'ar' ? arLabel : enLabel;
 
   return (
     <div
       className="w-full rounded-3xl p-4 sm:p-5"
       style={{
         background: 'linear-gradient(180deg, #FBF3E6 0%, #F8ECD8 100%)',
-        boxShadow: '0 10px 24px rgba(120, 94, 42, 0.12)',
+        boxShadow: '0 10px 24px rgba(120,94,42,0.12)',
       }}
     >
       <div className="mx-auto w-full max-w-sm">
-        <div className="relative rounded-3xl overflow-hidden" style={{ background: '#F4E5CA' }}>
+
+        {/* ── Bottle image + SVG overlay ── */}
+        <div
+          className="relative rounded-3xl overflow-hidden"
+          style={{ background: '#F4E5CA' }}
+        >
           <img
             ref={imgRef}
             src={imageUrl}
@@ -133,35 +187,32 @@ export function InteractiveBottleSlider({
           />
 
           {bbox && (
-            <svg className="absolute inset-0 w-full h-full pointer-events-none">
-              {(() => {
-                const oilHeight = bbox.oilBottomY - bbox.oilTopY;
-                const startY = bbox.oilBottomY - startRatio * oilHeight;
-                const downwardOffset = (selectedMl / totalMl) * oilHeight;
-                const measuredY = Math.min(bbox.oilBottomY, startY + downwardOffset);
-                return (
-                  <>
-              {/* Vertical ml scale */}
-              {Array.from({ length: 6 }, (_, i) => {
-                const tickMl = i * 300;
-                const tickRatio = tickMl / totalMl;
-                const y = bbox.oilBottomY - tickRatio * (bbox.oilBottomY - bbox.oilTopY);
+            <svg
+              className="absolute inset-0 pointer-events-none"
+              width={imgDisplaySize.w}
+              height={imgDisplaySize.h}
+              style={{ left: 0, top: 0 }}
+            >
+              {/* ── Vertical ml scale (right of bottle) ── */}
+              {[0, 300, 600, 900, 1200, 1500].map((tickMl) => {
+                const ratio = tickMl / totalMl;
+                const y = bbox.oilBottomY - ratio * bbox.oilRange;
                 return (
                   <g key={tickMl}>
                     <line
-                      x1={bbox.x + bbox.w + 8}
+                      x1={bbox.bx + bbox.bw + 6}
                       y1={y}
-                      x2={bbox.x + bbox.w + 18}
+                      x2={bbox.bx + bbox.bw + 16}
                       y2={y}
                       stroke="#9B7A2C"
-                      strokeWidth="1.6"
-                      strokeOpacity="0.75"
+                      strokeWidth="1.4"
+                      strokeOpacity="0.7"
                     />
                     <text
-                      x={bbox.x + bbox.w + 21}
-                      y={y + 3}
+                      x={bbox.bx + bbox.bw + 19}
+                      y={y + 3.5}
                       fill="#7A5D20"
-                      fontSize="9"
+                      fontSize="8.5"
                       fontWeight="700"
                     >
                       {tickMl} ml
@@ -170,19 +221,19 @@ export function InteractiveBottleSlider({
                 );
               })}
 
-              {/* Start line: detected current oil surface */}
+              {/* ── Fixed oil surface line ── */}
               <line
-                x1={bbox.x - 4}
-                y1={startY}
-                x2={bbox.x + bbox.w + 6}
-                y2={startY}
+                x1={bbox.bx - 5}
+                y1={bbox.surfaceY}
+                x2={bbox.bx + bbox.bw + 5}
+                y2={bbox.surfaceY}
                 stroke="#F5B700"
                 strokeWidth="2.5"
-                strokeOpacity="0.75"
+                strokeOpacity="0.85"
               />
               <text
-                x={bbox.x + 8}
-                y={startY - 6}
+                x={bbox.bx + 8}
+                y={bbox.surfaceY - 5}
                 fill="#7A5D20"
                 fontSize="8"
                 fontWeight="700"
@@ -190,91 +241,137 @@ export function InteractiveBottleSlider({
                 {lang === 'ar' ? 'سطح الزيت' : 'Oil surface'}
               </text>
 
-              {/* Current selected level line (moves down from start) */}
-              <motion.line
-                x1={bbox.x - 4}
-                y1={measuredY}
-                x2={bbox.x + bbox.w + 6}
-                y2={measuredY}
-                stroke="#F5B700"
-                strokeWidth="3"
-                strokeDasharray="6 3"
-                style={{ filter: 'drop-shadow(0 0 6px rgba(245, 183, 0, 0.75))' }}
-                animate={{
-                  y1: measuredY,
-                  y2: measuredY,
-                }}
-                transition={{ type: 'spring', stiffness: 220, damping: 24 }}
-              />
+              {/* ── Animated measurement line (moves DOWN as cups increase) ── */}
+              {selectedCups > 0 && (
+                <>
+                  {/* Dashed animated line */}
+                  <motion.line
+                    x1={bbox.bx - 5}
+                    x2={bbox.bx + bbox.bw + 5}
+                    stroke="#F5B700"
+                    strokeWidth="2.8"
+                    strokeDasharray="6 3"
+                    style={{ y: springY }}
+                  />
 
-              {/* Floating selected label */}
-              <g>
-                <rect
-                  x={bbox.x + 4}
-                  y={measuredY - 20}
-                  width="74"
-                  height="16"
-                  rx="8"
-                  fill="#FFF5D6"
-                  stroke="#F5B700"
-                  strokeWidth="1"
-                />
-                <text
-                  x={bbox.x + 41}
-                  y={measuredY - 9}
-                  textAnchor="middle"
-                  fill="#7A5D20"
-                  fontSize="8.5"
-                  fontWeight="700"
-                >
-                  {lang === 'ar' ? arabicCupLabel(selectedCups) : `${selectedMl} ml`}
-                </text>
-              </g>
-                  </>
-                );
-              })()}
+                  {/* Arrow showing direction ↓ */}
+                  <motion.text
+                    x={bbox.bx - 14}
+                    fill="#F5B700"
+                    fontSize="11"
+                    fontWeight="900"
+                    textAnchor="middle"
+                    style={{ y: useTransform(springY, (v) => v - 4) }}
+                  >
+                    ↓
+                  </motion.text>
+
+                  {/* Floating label bubble */}
+                  <motion.g style={{ y: springY }}>
+                    <rect
+                      x={bbox.bx + 5}
+                      y={-20}
+                      width={72}
+                      height={16}
+                      rx={8}
+                      fill="#FFF5D6"
+                      stroke="#F5B700"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={bbox.bx + 41}
+                      y={-9}
+                      textAnchor="middle"
+                      fill="#7A5D20"
+                      fontSize="8.5"
+                      fontWeight="700"
+                    >
+                      {lang === 'ar' ? arLabel : `${selectedMl} ml`}
+                    </text>
+                  </motion.g>
+
+                  {/* Vertical distance indicator between surface and line */}
+                  <motion.line
+                    x1={bbox.bx - 5}
+                    y1={bbox.surfaceY}
+                    x2={bbox.bx - 5}
+                    stroke="#F5B700"
+                    strokeWidth="1.2"
+                    strokeOpacity="0.5"
+                    strokeDasharray="2 2"
+                    style={{ y2: springY }}
+                  />
+                </>
+              )}
             </svg>
           )}
         </div>
 
-        {/* Horizontal cup slider */}
-        <div className="mt-4 rounded-2xl p-4" style={{ background: '#FFF8EC', boxShadow: 'inset 0 0 0 1px #F3E3BE' }}>
-          <div className="flex items-center justify-between mb-2 text-sm font-semibold text-[#7A5D20]">
-            <span>{lang === 'ar' ? 'اختاري المستوى' : 'Select level'}</span>
-            <span className="bg-[#FFE7A3] px-2 py-0.5 rounded-full">{formatCupFraction(selectedCups)} {lang === 'ar' ? 'كوب' : 'cup'}</span>
+        {/* ── Horizontal cup slider ── */}
+        <div
+          className="mt-4 rounded-2xl p-4"
+          style={{
+            background: '#FFF8EC',
+            boxShadow: 'inset 0 0 0 1px #F3E3BE',
+          }}
+        >
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold text-[#7A5D20]">
+              {lang === 'ar' ? 'اختاري المستوى' : 'Select level'}
+            </span>
+            <span className="bg-[#FFE7A3] text-[#7A5D20] px-3 py-0.5 rounded-full text-sm font-semibold">
+              {lang === 'ar' ? arLabel : formatCupFraction(selectedCups) + ' cup'}
+            </span>
           </div>
 
+          {/*
+            SLIDER:
+            - min=0, max=steps.length-1 (integer index)
+            - value increases → selectedCups increases → line moves DOWN
+            - direction: ltr so thumb moves right as value increases
+          */}
           <input
             type="range"
             min={0}
-            max={maxCups}
-            step={cupStep}
-            value={Number(selectedCups.toFixed(2))}
-            onChange={(e) => sliderToMl(Number(e.target.value))}
+            max={steps.length - 1}
+            step={1}
+            value={sliderIndex}
+            onChange={handleSliderChange}
             className="w-full accent-[#F5B700]"
+            style={{ direction: 'ltr' }}
             aria-label={lang === 'ar' ? 'مستوى الأكواب' : 'Cup level'}
           />
 
-          <div className="mt-3 overflow-x-auto pb-1">
-            <div className="min-w-[640px] flex items-start justify-between px-0.5">
-              {cupTicks.map((tick) => (
-                <div key={tick.cupsValue} className="flex flex-col items-center w-10">
+          {/* Tick marks */}
+          <div className="mt-2 overflow-x-auto pb-1">
+            <div
+              style={{ minWidth: `${steps.length * 48}px` }}
+              className="flex items-start justify-between px-0.5"
+            >
+              {steps.map((s) => (
+                <div key={s.cups} className="flex flex-col items-center" style={{ width: 44 }}>
                   <span className="w-[2px] h-3 rounded bg-[#D6B66F]" />
-                  <span className="text-[11px] text-[#7A5D20] font-semibold mt-1">{tick.label}</span>
-                  <span className="text-[10px] text-[#A17F34] mt-0.5 whitespace-nowrap">{tick.arLabel}</span>
+                  <span className="text-[11px] text-[#7A5D20] font-semibold mt-1 whitespace-nowrap">
+                    {s.label}
+                  </span>
+                  <span className="text-[10px] text-[#A17F34] mt-0.5 whitespace-nowrap">
+                    {s.arLabel}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
 
+          {/* ml readout */}
           <p className="text-center text-sm font-semibold text-[#8D6E2F] mt-3">
-            {arabicCupLabel(selectedCups)} = {selectedMl} ml
+            {arLabel} = {selectedMl} ml
           </p>
-
           <p className="text-center text-xs text-[#A17F34] mt-1">
             1 كوب = {cupMl} ml
           </p>
 
+          {/* Confirm button */}
           {onConfirm && (
             <button
               onClick={handleConfirm}
@@ -282,19 +379,20 @@ export function InteractiveBottleSlider({
               className={`w-full mt-3 py-2.5 rounded-xl text-sm font-bold transition-all ${
                 confirmed
                   ? 'bg-[#E8F5E9] text-[#2E7D32]'
-                  : 'text-[#6C4D13] bg-[#F8D56A] active:scale-[0.99]'
+                  : 'bg-[#F8D56A] text-[#6C4D13] active:scale-[0.99]'
               }`}
             >
               {confirmed
                 ? (lang === 'ar' ? '✓ تم حفظ التصحيح' : '✓ Correction saved')
-                : (lang === 'ar' ? 'حفظ التصحيح' : 'Save correction')}
+                : (lang === 'ar' ? 'حفظ التصحيح'      : 'Save correction')}
             </button>
           )}
 
+          {/* Summary */}
           <p className="text-center text-xs text-[#A17F34] mt-2">
             {lang === 'ar'
-              ? `القياس من سطح الزيت: ${highlightedCupLabel} (${selectedMl} ml)`
-              : `Measured from oil surface: ${highlightedCupLabel} (${selectedMl} ml)`}
+              ? `القياس من سطح الزيت: ${cupLabel} (${selectedMl} ml)`
+              : `Measured from oil surface: ${cupLabel} (${selectedMl} ml)`}
           </p>
         </div>
       </div>
@@ -302,20 +400,25 @@ export function InteractiveBottleSlider({
   );
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Format cups as a fraction string: 0 → "0", 0.5 → "1/2", 1.5 → "1 1/2" */
 function formatCupFraction(cups: number): string {
   const rounded = Math.round(cups * 2) / 2;
   const whole = Math.floor(rounded);
-  const half = rounded - whole;
+  const half  = rounded - whole;
 
   if (whole === 0 && half === 0.5) return '1/2';
-  if (half === 0) return `${whole}`;
+  if (half === 0)                  return `${whole}`;
   return `${whole} 1/2`;
 }
 
+/** Arabic cup label */
 function arabicCupLabel(cups: number): string {
   const rounded = Math.round(cups * 2) / 2;
-
+  if (rounded === 0)   return '0 كوب';
   if (rounded === 0.5) return 'نص كوب';
   if (rounded % 1 === 0) return `${rounded} كوب`;
-  return `${rounded} كوب`;
+  const whole = Math.floor(rounded);
+  return `${whole} نص كوب`;
 }
