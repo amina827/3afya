@@ -326,30 +326,36 @@ export function InteractiveBottleSlider({
           </div>
 
           {/*
-            SLIDER:
-            - min=0, max=steps.length-1 (integer index)
-            - value increases → selectedCups increases → line moves DOWN
-            - direction: ltr so thumb moves right as value increases
+            SLIDER — RTL layout (Arabic):
+            - Visually: 0 on the RIGHT, max on the LEFT (RTL)
+            - Thumb moves LEFT → more cups → line moves DOWN in bottle
+            - We use direction:rtl on the wrapper so the native range input
+              reverses naturally. The raw value still increases left→right
+              internally, but visually it's right→left.
+            - To keep logic consistent, we store sliderIndex as 0=min cups,
+              but render the input with direction:rtl so 0 appears on the right.
           */}
-          <input
-            type="range"
-            min={0}
-            max={steps.length - 1}
-            step={1}
-            value={sliderIndex}
-            onChange={handleSliderChange}
-            className="w-full accent-[#F5B700]"
-            style={{ direction: 'ltr' }}
-            aria-label={lang === 'ar' ? 'مستوى الأكواب' : 'Cup level'}
-          />
+          <div style={{ direction: 'rtl' }}>
+            <input
+              type="range"
+              min={0}
+              max={steps.length - 1}
+              step={1}
+              value={sliderIndex}
+              onChange={handleSliderChange}
+              className="w-full accent-[#F5B700]"
+              aria-label={lang === 'ar' ? 'مستوى الأكواب' : 'Cup level'}
+            />
+          </div>
 
-          {/* Tick marks */}
-          <div className="mt-2 overflow-x-auto pb-1">
+          {/* Tick marks — rendered RTL: max value on left, 0 on right */}
+          <div className="mt-2 overflow-x-auto pb-1" style={{ direction: 'rtl' }}>
             <div
               style={{ minWidth: `${steps.length * 48}px` }}
               className="flex items-start justify-between px-0.5"
             >
-              {steps.map((s) => (
+              {/* Reverse the steps array so largest cup value is on the left */}
+              {[...steps].reverse().map((s) => (
                 <div key={s.cups} className="flex flex-col items-center" style={{ width: 44 }}>
                   <span className="w-[2px] h-3 rounded bg-[#D6B66F]" />
                   <span className="text-[11px] text-[#7A5D20] font-semibold mt-1 whitespace-nowrap">
