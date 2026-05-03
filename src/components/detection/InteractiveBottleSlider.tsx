@@ -40,7 +40,6 @@ export function InteractiveBottleSlider({
   const selectedMl = selectedCups * cupMl;
   const startRatio = initialMl / totalMl;
   const lineMl = Math.max(0, initialMl - selectedMl);
-  const lineRatio = lineMl / totalMl;
 
   const computeBbox = useCallback(() => {
     const img = imgRef.current;
@@ -135,6 +134,13 @@ export function InteractiveBottleSlider({
 
           {bbox && (
             <svg className="absolute inset-0 w-full h-full pointer-events-none">
+              {(() => {
+                const oilHeight = bbox.oilBottomY - bbox.oilTopY;
+                const startY = bbox.oilBottomY - startRatio * oilHeight;
+                const downwardOffset = (selectedMl / totalMl) * oilHeight;
+                const measuredY = Math.min(bbox.oilBottomY, startY + downwardOffset);
+                return (
+                  <>
               {/* Vertical ml scale */}
               {Array.from({ length: 6 }, (_, i) => {
                 const tickMl = i * 300;
@@ -167,28 +173,36 @@ export function InteractiveBottleSlider({
               {/* Start line: detected current oil surface */}
               <line
                 x1={bbox.x - 4}
-                y1={bbox.oilBottomY - startRatio * (bbox.oilBottomY - bbox.oilTopY)}
+                y1={startY}
                 x2={bbox.x + bbox.w + 6}
-                y2={bbox.oilBottomY - startRatio * (bbox.oilBottomY - bbox.oilTopY)}
-                stroke="#D6B66F"
-                strokeWidth="2"
-                strokeDasharray="4 3"
-                strokeOpacity="0.65"
+                y2={startY}
+                stroke="#F5B700"
+                strokeWidth="2.5"
+                strokeOpacity="0.75"
               />
+              <text
+                x={bbox.x + 8}
+                y={startY - 6}
+                fill="#7A5D20"
+                fontSize="8"
+                fontWeight="700"
+              >
+                {lang === 'ar' ? 'سطح الزيت' : 'Oil surface'}
+              </text>
 
               {/* Current selected level line (moves down from start) */}
               <motion.line
                 x1={bbox.x - 4}
-                y1={bbox.oilBottomY - lineRatio * (bbox.oilBottomY - bbox.oilTopY)}
+                y1={measuredY}
                 x2={bbox.x + bbox.w + 6}
-                y2={bbox.oilBottomY - lineRatio * (bbox.oilBottomY - bbox.oilTopY)}
+                y2={measuredY}
                 stroke="#F5B700"
                 strokeWidth="3"
                 strokeDasharray="6 3"
                 style={{ filter: 'drop-shadow(0 0 6px rgba(245, 183, 0, 0.75))' }}
                 animate={{
-                  y1: bbox.oilBottomY - lineRatio * (bbox.oilBottomY - bbox.oilTopY),
-                  y2: bbox.oilBottomY - lineRatio * (bbox.oilBottomY - bbox.oilTopY),
+                  y1: measuredY,
+                  y2: measuredY,
                 }}
                 transition={{ type: 'spring', stiffness: 220, damping: 24 }}
               />
@@ -197,7 +211,7 @@ export function InteractiveBottleSlider({
               <g>
                 <rect
                   x={bbox.x + 4}
-                  y={bbox.oilBottomY - lineRatio * (bbox.oilBottomY - bbox.oilTopY) - 20}
+                  y={measuredY - 20}
                   width="74"
                   height="16"
                   rx="8"
@@ -207,7 +221,7 @@ export function InteractiveBottleSlider({
                 />
                 <text
                   x={bbox.x + 41}
-                  y={bbox.oilBottomY - lineRatio * (bbox.oilBottomY - bbox.oilTopY) - 9}
+                  y={measuredY - 9}
                   textAnchor="middle"
                   fill="#7A5D20"
                   fontSize="8.5"
@@ -216,6 +230,9 @@ export function InteractiveBottleSlider({
                   {lang === 'ar' ? arabicCupLabel(selectedCups) : `${selectedMl} ml`}
                 </text>
               </g>
+                  </>
+                );
+              })()}
             </svg>
           )}
         </div>
