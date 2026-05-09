@@ -1,27 +1,39 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useSpring, useTransform } from 'framer-motion';
 import { useLanguage } from '@/hooks/useLanguage';
 import type { BottleBBox } from '@/services/api';
 
 interface InteractiveBottleSliderProps {
-  imageUrl: string;            // user's actual photo
-  bottleBbox: BottleBBox;      // detected bottle bbox in image coordinates
-  initialMl: number;           // detected oil amount in ml
-  totalMl?: number;            // 1500 (1.5L)
-  cupMl?: number;              // 200 (ml per cup)
-  stepMl?: number;             // 100 (snap step)
+  imageUrl: string;
+  bottleBbox: BottleBBox;
+  initialMl: number;
+  totalMl?: number;
+  cupMl?: number;
+  stepMl?: number;
   onChange?: (ml: number) => void;
   onConfirm?: (ml: number) => void;
 }
 
-// Where the oil column actually is, as a fraction of the bottle bbox.
-// 0 = top of bbox (neck), 1 = bottom of bbox (base).
-// The bottle has a small unfilled space at the very top (neck) and
-// a small base curve at the bottom that doesn't hold oil.
-const OIL_COLUMN_TOP_OFFSET = 0.04;    // 4% from bbox top (just below neck)
-const OIL_COLUMN_BOTTOM_OFFSET = 0.02; // 2% from bbox bottom (above base)
+// Offsets to trim the bounding box to just the oil column area
+const OIL_COLUMN_TOP_OFFSET = 0.04;
+const OIL_COLUMN_BOTTOM_OFFSET = 0.02;
+
+// How many cup steps are available (e.g. stepMl=100, cupMl=200 → step = 0.5 cups)
+function buildSteps(maxCups: number, cupStep: number) {
+  const steps: { cups: number; label: string; arLabel: string }[] = [];
+  let c = 0;
+  while (c <= maxCups + 0.001) {
+    steps.push({
+      cups: c,
+      label: formatCupFraction(c),
+      arLabel: arabicCupLabel(c),
+    });
+    c = Math.round((c + cupStep) * 100) / 100;
+  }
+  return steps;
+}
 
 export function InteractiveBottleSlider({
   imageUrl,
@@ -34,598 +46,385 @@ export function InteractiveBottleSlider({
   onConfirm,
 }: InteractiveBottleSliderProps) {
   const { lang } = useLanguage();
-  const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
-  const [imgRect, setImgRect] = useState<DOMRect | null>(null);
-  const [ml, setMl] = useState(() => snapToStep(initialMl, stepMl, totalMl));
-  const [isDragging, setIsDragging] = useState(false);
+  const [imgReady, setImgReady] = useState(false);
+  const [imgNaturalSize, setImgNaturalSize] = useState({ w: 1, h: 1 });
+  const [imgDisplaySize, setImgDisplaySize] = useState({ w: 1, h: 1 });
   const [confirmed, setConfirmed] = useState(false);
 
-  const totalSteps = Math.round(totalMl / stepMl); // 15
-  const totalCups = totalMl / cupMl;               // 7.5
-  const cups = ml / cupMl;
-  const ratio = ml / totalMl;
+  // cupStep in cup units (e.g. 0.5 if stepMl=100 and cupMl=200)
+  const cupStep = stepMl / cupMl;
 
-  // Compute bbox position in rendered (CSS) pixels
+  // Maximum cups that can be measured downward from the oil surface
+  // (can't go below the bottle bottom, i.e. can't exceed initialMl worth of travel)
+  const maxCups = Math.floor((initialMl / cupMl) / cupStep) * cupStep;
+
+  const steps = buildSteps(maxCups, cupStep);
+
+  // slider index (integer 0..steps.length-1)
+  const [sliderIndex, setSliderIndex] = useState(0);
+  const selectedCups = steps[sliderIndex]?.cups ?? 0;
+  const selectedMl = Math.round(selectedCups * cupMl);
+
+  // --- Geometry helpers ---
+
   const computeBbox = useCallback(() => {
     const img = imgRef.current;
-    if (!img) return null;
-    const rect = img.getBoundingClientRect();
-    if (rect.width === 0) return null;
+    if (!img || !imgReady) return null;
 
+    const rect = img.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+
+    // Scale from natural image pixels → displayed pixels
     const scaleX = rect.width / bottleBbox.image_w;
     const scaleY = rect.height / bottleBbox.image_h;
 
-    return {
-      x: bottleBbox.x * scaleX,
-      y: bottleBbox.y * scaleY,
-      w: bottleBbox.w * scaleX,
-      h: bottleBbox.h * scaleY,
-      // Oil column inside bbox
-      oilTopY: bottleBbox.y * scaleY + bottleBbox.h * scaleY * OIL_COLUMN_TOP_OFFSET,
-      oilBottomY: bottleBbox.y * scaleY + bottleBbox.h * scaleY * (1 - OIL_COLUMN_BOTTOM_OFFSET),
-    };
-  }, [bottleBbox]);
+    const bx = bottleBbox.x * scaleX;
+    const by = bottleBbox.y * scaleY;
+    const bw = bottleBbox.w * scaleX;
+    const bh = bottleBbox.h * scaleY;
 
-  // Recompute on resize / image load
+    // The vertical range of the "oil column" inside the bottle bbox
+    const oilTopY    = by + bh * OIL_COLUMN_TOP_OFFSET;
+    const oilBottomY = by + bh * (1 - OIL_COLUMN_BOTTOM_OFFSET);
+    const oilRange   = oilBottomY - oilTopY; // pixels per totalMl
+
+    // Detected oil surface Y — this is the FIXED reference point
+    // initialMl tells us how much oil is in the bottle, so the surface is
+    // at distance (initialMl / totalMl) * oilRange above oilBottomY.
+    const surfaceY = oilBottomY - (initialMl / totalMl) * oilRange;
+
+    return { bx, by, bw, bh, oilTopY, oilBottomY, oilRange, surfaceY, rect };
+  }, [bottleBbox, initialMl, totalMl, imgReady]);
+
+  // Track display size for re-render on resize
   useEffect(() => {
-    const updateRect = () => {
+    const updateSize = () => {
       const img = imgRef.current;
-      if (img) {
-        setImgRect(img.getBoundingClientRect());
-      }
+      if (!img) return;
+      const rect = img.getBoundingClientRect();
+      setImgDisplaySize({ w: rect.width, h: rect.height });
     };
-    updateRect();
 
-    const observer = new ResizeObserver(updateRect);
-    if (imgRef.current) observer.observe(imgRef.current);
-    window.addEventListener('resize', updateRect);
+    updateSize();
+    const ro = new ResizeObserver(updateSize);
+    if (imgRef.current) ro.observe(imgRef.current);
+    window.addEventListener('resize', updateSize);
     return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', updateRect);
+      ro.disconnect();
+      window.removeEventListener('resize', updateSize);
     };
   }, []);
 
   const handleImgLoad = () => {
     const img = imgRef.current;
-    if (img) setImgRect(img.getBoundingClientRect());
+    if (!img) return;
+    setImgNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+    const rect = img.getBoundingClientRect();
+    setImgDisplaySize({ w: rect.width, h: rect.height });
+    setImgReady(true);
   };
+
+  // Framer Motion spring for the animated measurement line Y position
+  const springY = useSpring(0, { stiffness: 260, damping: 28 });
 
   const bbox = computeBbox();
-  // Recompute when imgRect changes
-  void imgRect;
+  void imgNaturalSize; // referenced to trigger re-compute when natural size changes
 
-  // Convert pointer Y to ml (snapped)
-  const pointerToMl = useCallback(
-    (clientY: number): number => {
-      const img = imgRef.current;
-      if (!img) return ml;
-      const rect = img.getBoundingClientRect();
-      const scaleY = rect.height / bottleBbox.image_h;
-      const oilTop = bottleBbox.y * scaleY + bottleBbox.h * scaleY * OIL_COLUMN_TOP_OFFSET;
-      const oilBottom = bottleBbox.y * scaleY + bottleBbox.h * scaleY * (1 - OIL_COLUMN_BOTTOM_OFFSET);
-      const oilHeight = oilBottom - oilTop;
+  // Compute the Y position of the measurement line:
+  // surfaceY + (selectedMl / totalMl) * oilRange
+  // As selectedMl grows → measuredY moves downward (larger Y value).
+  let measuredY = 0;
+  if (bbox) {
+    const downwardPx = (selectedMl / totalMl) * bbox.oilRange;
+    measuredY = Math.min(bbox.oilBottomY, bbox.surfaceY + downwardPx);
+  }
 
-      const relativeY = clientY - rect.top - oilTop;
-      const clampedY = Math.max(0, Math.min(oilHeight, relativeY));
-      const newRatio = 1 - clampedY / oilHeight;
-      const rawMl = newRatio * totalMl;
-      return snapToStep(rawMl, stepMl, totalMl);
-    },
-    [bottleBbox, totalMl, stepMl, ml],
-  );
+  useEffect(() => {
+    if (bbox) springY.set(measuredY);
+  }, [measuredY, bbox, springY]);
 
-  const handlePointerDown = (e: React.PointerEvent) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    setIsDragging(true);
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const idx = Number(e.target.value);
+    setSliderIndex(idx);
     setConfirmed(false);
-    const newMl = pointerToMl(e.clientY);
-    setMl(newMl);
-    onChange?.(newMl);
-  };
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging) return;
-    const newMl = pointerToMl(e.clientY);
-    if (newMl !== ml) {
-      setMl(newMl);
-      onChange?.(newMl);
-    }
-  };
-
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
-    setIsDragging(false);
-  };
-
-  const adjust = (delta: number) => {
-    const newMl = Math.max(0, Math.min(totalMl, ml + delta));
-    setMl(newMl);
-    setConfirmed(false);
-    onChange?.(newMl);
+    const cups = steps[idx]?.cups ?? 0;
+    // Report the remaining oil level (oil surface level minus cups taken)
+    onChange?.(Math.max(0, initialMl - cups * cupMl));
   };
 
   const handleConfirm = () => {
     setConfirmed(true);
-    onConfirm?.(ml);
+    onConfirm?.(Math.max(0, initialMl - selectedMl));
   };
 
-  // Generate ticks (16 positions: 0, 100, 200, ..., 1500)
-  const ticks = Array.from({ length: totalSteps + 1 }, (_, i) => {
-    const value = i * stepMl;
-    const cupVal = value / cupMl;
-    return {
-      value,
-      cupVal,
-      isMajor: value % 500 === 0,        // 0, 500, 1000, 1500
-      isWholeCup: value % cupMl === 0,   // every full cup
-    };
-  });
-
-  // Color based on level
-  const levelColor =
-    ratio > 0.66 ? '#22c55e' :
-    ratio > 0.33 ? '#eab308' :
-    ratio > 0.10 ? '#f97316' :
-    '#ef4444';
-
-  const correctionDelta = ml - initialMl;
-  const hasCorrection = Math.abs(correctionDelta) > 0;
+  const arLabel  = arabicCupLabel(selectedCups);
+  const enLabel  = `${formatCupFraction(selectedCups)} cup`;
+  const cupLabel = lang === 'ar' ? arLabel : enLabel;
 
   return (
-    <div className="w-full">
-      {/* Image with overlay */}
-      <div ref={containerRef} className="relative w-full select-none rounded-2xl overflow-hidden bg-black">
-        {/* Bottle photo */}
-        <img
-          ref={imgRef}
-          src={imageUrl}
-          alt="Bottle scan"
-          className="w-full h-auto block"
-          onLoad={handleImgLoad}
-          draggable={false}
-        />
+    <div
+      className="w-full rounded-3xl p-4 sm:p-5"
+      style={{
+        background: 'linear-gradient(180deg, #FBF3E6 0%, #F8ECD8 100%)',
+        boxShadow: '0 10px 24px rgba(120,94,42,0.12)',
+      }}
+    >
+      <div className="mx-auto w-full max-w-sm">
 
-        {/* Interactive overlay (slider track + ticks + handle) */}
-        {bbox && (
-          <div
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            className="absolute inset-0 cursor-grab active:cursor-grabbing touch-none"
-            style={{ touchAction: 'none' }}
-          >
+        {/* ── Bottle image + SVG overlay ── */}
+        <div
+          className="relative rounded-3xl overflow-hidden"
+          style={{ background: '#F4E5CA' }}
+        >
+          <img
+            ref={imgRef}
+            src={imageUrl}
+            alt="Bottle scan"
+            className="w-full h-auto block"
+            onLoad={handleImgLoad}
+            draggable={false}
+          />
+
+          {bbox && (
             <svg
-              className="absolute inset-0 w-full h-full pointer-events-none"
+              className="absolute inset-0 pointer-events-none"
+              width={imgDisplaySize.w}
+              height={imgDisplaySize.h}
               style={{ left: 0, top: 0 }}
             >
-              {/* Bottle bbox outline (subtle) */}
-              <rect
-                x={bbox.x}
-                y={bbox.y}
-                width={bbox.w}
-                height={bbox.h}
-                fill="none"
-                stroke="rgba(255,255,255,0.35)"
-                strokeWidth="1.5"
-                strokeDasharray="3 3"
-                rx="4"
-              />
-
-              {/* "NECK" label at top */}
-              <text
-                x={bbox.x + bbox.w / 2}
-                y={bbox.y - 6}
-                fill="rgba(255,255,255,0.9)"
-                fontSize="10"
-                fontWeight="bold"
-                textAnchor="middle"
-                style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
-              >
-                {lang === 'ar' ? 'الرقبة' : 'NECK'}
-              </text>
-
-              {/* "BASE" label at bottom */}
-              <text
-                x={bbox.x + bbox.w / 2}
-                y={bbox.y + bbox.h + 14}
-                fill="rgba(255,255,255,0.9)"
-                fontSize="10"
-                fontWeight="bold"
-                textAnchor="middle"
-                style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
-              >
-                {lang === 'ar' ? 'القاع' : 'BASE'}
-              </text>
-
-              {/* Tick marks - on the right side of the bbox */}
-              {ticks.map((tick) => {
-                const oilTop = bbox.oilTopY;
-                const oilBottom = bbox.oilBottomY;
-                const oilHeight = oilBottom - oilTop;
-                const tickRatio = tick.value / totalMl;
-                const tickY = oilBottom - tickRatio * oilHeight;
-                const isCurrent = tick.value === ml;
-                const tickWidth = tick.isMajor ? 12 : tick.isWholeCup ? 8 : 4;
-
+              {/* ── Vertical ml scale (right of bottle) ── */}
+              {[0, 300, 600, 900, 1200, 1500].map((tickMl) => {
+                const ratio = tickMl / totalMl;
+                const y = bbox.oilBottomY - ratio * bbox.oilRange;
                 return (
-                  <g key={tick.value}>
+                  <g key={tickMl}>
                     <line
-                      x1={bbox.x + bbox.w + 2}
-                      y1={tickY}
-                      x2={bbox.x + bbox.w + 2 + tickWidth}
-                      y2={tickY}
-                      stroke={isCurrent ? levelColor : 'white'}
-                      strokeWidth={tick.isMajor ? 2 : tick.isWholeCup ? 1.5 : 1}
-                      strokeOpacity={isCurrent ? 1 : tick.isMajor ? 0.95 : tick.isWholeCup ? 0.75 : 0.45}
+                      x1={bbox.bx + bbox.bw + 6}
+                      y1={y}
+                      x2={bbox.bx + bbox.bw + 16}
+                      y2={y}
+                      stroke="#9B7A2C"
+                      strokeWidth="1.4"
+                      strokeOpacity="0.7"
                     />
-                    {tick.isMajor && (
-                      <text
-                        x={bbox.x + bbox.w + 16}
-                        y={tickY + 3}
-                        fill="white"
-                        fontSize="9"
-                        fontWeight="bold"
-                        style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
-                      >
-                        {tick.value}ml
-                      </text>
-                    )}
-                    {tick.isWholeCup && !tick.isMajor && (
-                      <text
-                        x={bbox.x + bbox.w + 12}
-                        y={tickY + 3}
-                        fill="rgba(255,255,255,0.7)"
-                        fontSize="8"
-                        style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}
-                      >
-                        {tick.cupVal}c
-                      </text>
-                    )}
+                    <text
+                      x={bbox.bx + bbox.bw + 19}
+                      y={y + 3.5}
+                      fill="#7A5D20"
+                      fontSize="8.5"
+                      fontWeight="700"
+                    >
+                      {tickMl} ml
+                    </text>
                   </g>
                 );
               })}
 
-              {/* Filled oil overlay (semi-transparent green inside bbox below the level line) */}
-              {(() => {
-                const oilTop = bbox.oilTopY;
-                const oilBottom = bbox.oilBottomY;
-                const oilHeight = oilBottom - oilTop;
-                const fillTopY = oilBottom - ratio * oilHeight;
-                return (
-                  <rect
-                    x={bbox.x + 2}
-                    y={fillTopY}
-                    width={bbox.w - 4}
-                    height={Math.max(0, bbox.y + bbox.h - fillTopY - 2)}
-                    fill={levelColor}
-                    fillOpacity="0.18"
-                    rx="2"
+              {/* ── Fixed oil surface line ── */}
+              <line
+                x1={bbox.bx - 5}
+                y1={bbox.surfaceY}
+                x2={bbox.bx + bbox.bw + 5}
+                y2={bbox.surfaceY}
+                stroke="#F5B700"
+                strokeWidth="2.5"
+                strokeOpacity="0.85"
+              />
+              <text
+                x={bbox.bx + 8}
+                y={bbox.surfaceY - 5}
+                fill="#7A5D20"
+                fontSize="8"
+                fontWeight="700"
+              >
+                {lang === 'ar' ? 'سطح الزيت' : 'Oil surface'}
+              </text>
+
+              {/* ── Animated measurement line (moves DOWN as cups increase) ── */}
+              {selectedCups > 0 && (
+                <>
+                  {/* Dashed animated line */}
+                  <motion.line
+                    x1={bbox.bx - 5}
+                    x2={bbox.bx + bbox.bw + 5}
+                    stroke="#F5B700"
+                    strokeWidth="2.8"
+                    strokeDasharray="6 3"
+                    style={{ y: springY }}
                   />
-                );
-              })()}
 
-              {/* Original auto-detected reference line (cyan, dashed) */}
-              {(() => {
-                const oilTop = bbox.oilTopY;
-                const oilBottom = bbox.oilBottomY;
-                const oilHeight = oilBottom - oilTop;
-                const initialRatio = initialMl / totalMl;
-                const initialY = oilBottom - initialRatio * oilHeight;
-                return (
-                  <g>
-                    <line
-                      x1={bbox.x - 4}
-                      y1={initialY}
-                      x2={bbox.x + bbox.w + 4}
-                      y2={initialY}
-                      stroke="#06b6d4"
-                      strokeWidth="2"
-                      strokeDasharray="4 3"
-                      strokeOpacity="0.95"
-                    />
-                    {/* "AUTO" badge on the right side */}
+                  {/* Arrow showing direction ↓ */}
+                  <motion.text
+                    x={bbox.bx - 14}
+                    fill="#F5B700"
+                    fontSize="11"
+                    fontWeight="900"
+                    textAnchor="middle"
+                    style={{ y: useTransform(springY, (v) => v - 4) }}
+                  >
+                    ↓
+                  </motion.text>
+
+                  {/* Floating label bubble */}
+                  <motion.g style={{ y: springY }}>
                     <rect
-                      x={bbox.x + bbox.w + 6}
-                      y={initialY - 7}
-                      width={28}
-                      height={14}
-                      rx={3}
-                      fill="#06b6d4"
+                      x={bbox.bx + 5}
+                      y={-20}
+                      width={72}
+                      height={16}
+                      rx={8}
+                      fill="#FFF5D6"
+                      stroke="#F5B700"
+                      strokeWidth="1"
                     />
                     <text
-                      x={bbox.x + bbox.w + 20}
-                      y={initialY + 3}
-                      fill="white"
-                      fontSize="8"
-                      fontWeight="bold"
+                      x={bbox.bx + 41}
+                      y={-9}
                       textAnchor="middle"
+                      fill="#7A5D20"
+                      fontSize="8.5"
+                      fontWeight="700"
                     >
-                      AUTO
+                      {lang === 'ar' ? arLabel : `${selectedMl} ml`}
                     </text>
-                  </g>
-                );
-              })()}
+                  </motion.g>
 
-              {/* Difference bracket (only when adjusted) */}
-              {(() => {
-                const oilTop = bbox.oilTopY;
-                const oilBottom = bbox.oilBottomY;
-                const oilHeight = oilBottom - oilTop;
-                const initialRatio = initialMl / totalMl;
-                const initialY = oilBottom - initialRatio * oilHeight;
-                const currentY = oilBottom - ratio * oilHeight;
-                const delta = ml - initialMl;
-                if (delta === 0) return null;
-
-                const isPositive = delta > 0; // user added oil
-                const bracketColor = isPositive ? '#22c55e' : '#ef4444';
-                const bracketX = bbox.x - 30;
-                const sign = isPositive ? '+' : '−';
-                const absDeltaMl = Math.abs(delta);
-                const absDeltaCups = absDeltaMl / cupMl;
-                const labelY = (initialY + currentY) / 2 + 3;
-
-                return (
-                  <g>
-                    {/* Vertical bracket line */}
-                    <line
-                      x1={bracketX}
-                      y1={Math.min(initialY, currentY)}
-                      x2={bracketX}
-                      y2={Math.max(initialY, currentY)}
-                      stroke={bracketColor}
-                      strokeWidth="2.5"
-                    />
-                    {/* Top tick */}
-                    <line
-                      x1={bracketX}
-                      y1={Math.min(initialY, currentY)}
-                      x2={bracketX + 6}
-                      y2={Math.min(initialY, currentY)}
-                      stroke={bracketColor}
-                      strokeWidth="2.5"
-                    />
-                    {/* Bottom tick */}
-                    <line
-                      x1={bracketX}
-                      y1={Math.max(initialY, currentY)}
-                      x2={bracketX + 6}
-                      y2={Math.max(initialY, currentY)}
-                      stroke={bracketColor}
-                      strokeWidth="2.5"
-                    />
-                    {/* Difference label background */}
-                    <rect
-                      x={bracketX - 56}
-                      y={labelY - 16}
-                      width={52}
-                      height={28}
-                      rx={6}
-                      fill={bracketColor}
-                    />
-                    <text
-                      x={bracketX - 30}
-                      y={labelY - 4}
-                      fill="white"
-                      fontSize="10"
-                      fontWeight="bold"
-                      textAnchor="middle"
-                    >
-                      {sign}{absDeltaMl}ml
-                    </text>
-                    <text
-                      x={bracketX - 30}
-                      y={labelY + 8}
-                      fill="white"
-                      fontSize="9"
-                      fontWeight="bold"
-                      textAnchor="middle"
-                    >
-                      {sign}{absDeltaCups % 1 === 0 ? absDeltaCups.toFixed(0) : absDeltaCups.toFixed(1)} {lang === 'ar' ? 'كوب' : 'cup'}
-                    </text>
-                  </g>
-                );
-              })()}
-
-              {/* Current oil level line */}
-              {(() => {
-                const oilTop = bbox.oilTopY;
-                const oilBottom = bbox.oilBottomY;
-                const oilHeight = oilBottom - oilTop;
-                const handleY = oilBottom - ratio * oilHeight;
-                return (
-                  <>
-                    {/* Horizontal line across bbox width */}
-                    <line
-                      x1={bbox.x - 4}
-                      y1={handleY}
-                      x2={bbox.x + bbox.w + 4}
-                      y2={handleY}
-                      stroke={levelColor}
-                      strokeWidth="3"
-                    />
-                    {/* White outline for contrast */}
-                    <line
-                      x1={bbox.x - 4}
-                      y1={handleY}
-                      x2={bbox.x + bbox.w + 4}
-                      y2={handleY}
-                      stroke="white"
-                      strokeWidth="0.5"
-                      strokeDasharray="2 2"
-                    />
-                    {/* Drag handle on the LEFT side of the bbox */}
-                    <circle
-                      cx={bbox.x - 8}
-                      cy={handleY}
-                      r={isDragging ? 11 : 9}
-                      fill={levelColor}
-                      stroke="white"
-                      strokeWidth="2"
-                    />
-                    {/* Up/down arrows on the handle */}
-                    <text
-                      x={bbox.x - 8}
-                      y={handleY + 3}
-                      fill="white"
-                      fontSize="10"
-                      textAnchor="middle"
-                      fontWeight="bold"
-                    >
-                      ⇕
-                    </text>
-                  </>
-                );
-              })()}
+                  {/* Vertical distance indicator between surface and line */}
+                  <motion.line
+                    x1={bbox.bx - 5}
+                    y1={bbox.surfaceY}
+                    x2={bbox.bx - 5}
+                    stroke="#F5B700"
+                    strokeWidth="1.2"
+                    strokeOpacity="0.5"
+                    strokeDasharray="2 2"
+                    style={{ y2: springY }}
+                  />
+                </>
+              )}
             </svg>
-          </div>
-        )}
-      </div>
-
-      {/* Below the image: ml/cups display + controls */}
-      <div className="mt-4 glass-card rounded-2xl p-4">
-        {/* Big value display */}
-        <motion.div
-          key={ml}
-          initial={{ scale: 0.95, opacity: 0.8 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 22 }}
-          className="text-center mb-4"
-        >
-          <div className="flex items-baseline justify-center gap-3">
-            <div>
-              <span className="text-shimmer text-4xl font-bold tabular-nums">{ml}</span>
-              <span className="text-gold-500 text-lg ms-1">ml</span>
-            </div>
-            <span className="text-gold-300 text-2xl">·</span>
-            <div>
-              <span className="text-shimmer text-4xl font-bold tabular-nums">{cups.toFixed(1)}</span>
-              <span className="text-gold-500 text-lg ms-1">{lang === 'ar' ? 'كوب' : 'cups'}</span>
-            </div>
-          </div>
-          <div className="text-gold-500 text-xs mt-1">
-            {lang === 'ar'
-              ? `من ${totalMl} مل (${totalCups} كوب)`
-              : `of ${totalMl}ml (${totalCups} cups)`}
-          </div>
-        </motion.div>
-
-        {/* Step controls */}
-        <div className="flex items-center justify-center gap-3 mb-3">
-          <button
-            onClick={() => adjust(-stepMl)}
-            disabled={ml <= 0}
-            className="bg-gold-100 hover:bg-gold-200 disabled:opacity-40 disabled:cursor-not-allowed text-gold-800 w-11 h-11 rounded-full font-bold text-xl flex items-center justify-center shadow-md transition-all active:scale-95"
-          >
-            −
-          </button>
-          <div className="bg-gold-50 border border-gold-200 rounded-xl px-3 py-1.5 text-center min-w-[90px]">
-            <div className="text-gold-600 text-[10px]">
-              {lang === 'ar' ? 'الخطوة' : 'Step'}
-            </div>
-            <div className="text-gold-800 text-xs font-bold tabular-nums">
-              {stepMl}ml ({(stepMl / cupMl).toFixed(1)} {lang === 'ar' ? 'كوب' : 'cup'})
-            </div>
-          </div>
-          <button
-            onClick={() => adjust(stepMl)}
-            disabled={ml >= totalMl}
-            className="bg-gold-100 hover:bg-gold-200 disabled:opacity-40 disabled:cursor-not-allowed text-gold-800 w-11 h-11 rounded-full font-bold text-xl flex items-center justify-center shadow-md transition-all active:scale-95"
-          >
-            +
-          </button>
+          )}
         </div>
 
-        {/* Difference panel - prominent comparison between auto and manual */}
-        {hasCorrection && (() => {
-          const isPositive = correctionDelta > 0;
-          const sign = isPositive ? '+' : '−';
-          const absMl = Math.abs(correctionDelta);
-          const absCups = absMl / cupMl;
-          const absCupsLabel =
-            absCups % 1 === 0 ? absCups.toFixed(0) : absCups.toFixed(1);
-          const initialCups = initialMl / cupMl;
-          const bgClass = isPositive
-            ? 'bg-green-50 border-green-300'
-            : 'bg-red-50 border-red-300';
-          const textClass = isPositive ? 'text-green-700' : 'text-red-700';
-          const accentClass = isPositive ? 'bg-green-500' : 'bg-red-500';
-          const arrow = isPositive ? '↑' : '↓';
-          const verb = lang === 'ar'
-            ? (isPositive ? 'زيادة' : 'نقصان')
-            : (isPositive ? 'Added' : 'Removed');
+        {/* ── Horizontal cup slider ── */}
+        <div
+          className="mt-4 rounded-2xl p-4"
+          style={{
+            background: '#FFF8EC',
+            boxShadow: 'inset 0 0 0 1px #F3E3BE',
+          }}
+        >
+          {/* Header row */}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-semibold text-[#7A5D20]">
+              {lang === 'ar' ? 'اختاري المستوى' : 'Select level'}
+            </span>
+            <span className="bg-[#FFE7A3] text-[#7A5D20] px-3 py-0.5 rounded-full text-sm font-semibold">
+              {lang === 'ar' ? arLabel : formatCupFraction(selectedCups) + ' cup'}
+            </span>
+          </div>
 
-          return (
-            <motion.div
-              initial={{ opacity: 0, y: 8, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ type: 'spring', stiffness: 280, damping: 22 }}
-              className={`border-2 rounded-xl p-3 mb-3 ${bgClass}`}
+          {/*
+            SLIDER — RTL layout (Arabic):
+            - Visually: 0 on the RIGHT, max on the LEFT (RTL)
+            - Thumb moves LEFT → more cups → line moves DOWN in bottle
+            - We use direction:rtl on the wrapper so the native range input
+              reverses naturally. The raw value still increases left→right
+              internally, but visually it's right→left.
+            - To keep logic consistent, we store sliderIndex as 0=min cups,
+              but render the input with direction:rtl so 0 appears on the right.
+          */}
+          <div style={{ direction: 'rtl' }}>
+            <input
+              type="range"
+              min={0}
+              max={steps.length - 1}
+              step={1}
+              value={sliderIndex}
+              onChange={handleSliderChange}
+              className="w-full accent-[#F5B700]"
+              aria-label={lang === 'ar' ? 'مستوى الأكواب' : 'Cup level'}
+            />
+          </div>
+
+          {/* Tick marks — rendered RTL: max value on left, 0 on right */}
+          <div className="mt-2 overflow-x-auto pb-1" style={{ direction: 'rtl' }}>
+            <div
+              style={{ minWidth: `${steps.length * 48}px` }}
+              className="flex items-start justify-between px-0.5"
             >
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${textClass}`}>
-                  {lang === 'ar' ? 'فرق التعديل' : 'Adjustment'}
-                </span>
-                <span className={`${accentClass} text-white text-[9px] font-bold px-2 py-0.5 rounded-full`}>
-                  {verb}
-                </span>
-              </div>
-              <div className="flex items-baseline justify-center gap-2">
-                <span className={`text-3xl font-bold ${textClass} tabular-nums`}>
-                  {arrow}
-                </span>
-                <div>
-                  <div className={`text-2xl font-bold ${textClass} tabular-nums`}>
-                    {sign}{absMl}<span className="text-sm ms-0.5">ml</span>
-                  </div>
-                  <div className={`text-sm font-bold ${textClass} tabular-nums`}>
-                    {sign}{absCupsLabel} {lang === 'ar' ? 'كوب' : (absCups === 1 ? 'cup' : 'cups')}
-                  </div>
+              {/* Reverse the steps array so largest cup value is on the left */}
+              {[...steps].reverse().map((s) => (
+                <div key={s.cups} className="flex flex-col items-center" style={{ width: 44 }}>
+                  <span className="w-[2px] h-3 rounded bg-[#D6B66F]" />
+                  <span className="text-[11px] text-[#7A5D20] font-semibold mt-1 whitespace-nowrap">
+                    {s.label}
+                  </span>
+                  <span className="text-[10px] text-[#A17F34] mt-0.5 whitespace-nowrap">
+                    {s.arLabel}
+                  </span>
                 </div>
-              </div>
-              <div className={`mt-2 pt-2 border-t border-current/20 text-[10px] text-center ${textClass} opacity-80`}>
-                {lang === 'ar'
-                  ? `من ${initialMl}ml (${initialCups.toFixed(1)} كوب) إلى ${ml}ml (${cups.toFixed(1)} كوب)`
-                  : `From ${initialMl}ml (${initialCups.toFixed(1)} cups) to ${ml}ml (${cups.toFixed(1)} cups)`}
-              </div>
-            </motion.div>
-          );
-        })()}
+              ))}
+            </div>
+          </div>
 
-        {/* Confirm button */}
-        {onConfirm && hasCorrection && (
-          <button
-            onClick={handleConfirm}
-            disabled={confirmed}
-            className={`w-full py-2.5 rounded-xl text-sm font-bold transition-all ${
-              confirmed
-                ? 'bg-green-100 text-green-700 cursor-default'
-                : 'bg-gold-gradient text-white shadow-lg shadow-gold-600/20 active:scale-98'
-            }`}
-          >
-            {confirmed
-              ? (lang === 'ar' ? '✓ تم حفظ التصحيح' : '✓ Correction saved')
-              : (lang === 'ar' ? 'حفظ التصحيح' : 'Save correction')}
-          </button>
-        )}
+          {/* ml readout */}
+          <p className="text-center text-sm font-semibold text-[#8D6E2F] mt-3">
+            {arLabel} = {selectedMl} ml
+          </p>
+          <p className="text-center text-xs text-[#A17F34] mt-1">
+            1 كوب = {cupMl} ml
+          </p>
 
-        {/* Hint */}
-        <p className="text-center text-gold-500 text-[10px] mt-2 leading-relaxed">
-          {lang === 'ar'
-            ? '💡 اسحب المقبض على يسار الزجاجة لتعديل المستوى يدويًا'
-            : '💡 Drag the handle on the left of the bottle to adjust the level manually'}
-        </p>
+          {/* Confirm button */}
+          {onConfirm && (
+            <button
+              onClick={handleConfirm}
+              disabled={confirmed}
+              className={`w-full mt-3 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                confirmed
+                  ? 'bg-[#E8F5E9] text-[#2E7D32]'
+                  : 'bg-[#F8D56A] text-[#6C4D13] active:scale-[0.99]'
+              }`}
+            >
+              {confirmed
+                ? (lang === 'ar' ? '✓ تم حفظ التصحيح' : '✓ Correction saved')
+                : (lang === 'ar' ? 'حفظ التصحيح'      : 'Save correction')}
+            </button>
+          )}
+
+          {/* Summary */}
+          <p className="text-center text-xs text-[#A17F34] mt-2">
+            {lang === 'ar'
+              ? `القياس من سطح الزيت: ${cupLabel} (${selectedMl} ml)`
+              : `Measured from oil surface: ${cupLabel} (${selectedMl} ml)`}
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
-// Snap a raw ml value to the nearest step, clamped to [0, totalMl]
-function snapToStep(rawMl: number, stepMl: number, totalMl: number): number {
-  const snapped = Math.round(rawMl / stepMl) * stepMl;
-  return Math.max(0, Math.min(totalMl, snapped));
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Format cups as a fraction string: 0 → "0", 0.5 → "1/2", 1.5 → "1 1/2" */
+function formatCupFraction(cups: number): string {
+  const rounded = Math.round(cups * 2) / 2;
+  const whole = Math.floor(rounded);
+  const half  = rounded - whole;
+
+  if (whole === 0 && half === 0.5) return '1/2';
+  if (half === 0)                  return `${whole}`;
+  return `${whole} 1/2`;
+}
+
+/** Arabic cup label */
+function arabicCupLabel(cups: number): string {
+  const rounded = Math.round(cups * 2) / 2;
+  if (rounded === 0)   return '0 كوب';
+  if (rounded === 0.5) return 'نص كوب';
+  if (rounded % 1 === 0) return `${rounded} كوب`;
+  const whole = Math.floor(rounded);
+  return `${whole} نص كوب`;
 }
