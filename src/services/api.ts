@@ -23,6 +23,7 @@ export interface BottleBBox {
 export interface ScanResult {
   scan: string;
   oil_ratio: number;
+  oil_percentage: number;
   remaining_volume_liters: number;
   consumed_volume_liters: number;
   remaining_cups: number;

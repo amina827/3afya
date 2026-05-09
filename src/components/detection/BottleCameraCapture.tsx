@@ -491,26 +491,24 @@ export function BottleCameraCapture({ onCapture }: BottleCameraCaptureProps) {
 
     setAlignState('capturing');
 
-    // Capture 5 frames, pick top 3 sharpest
-    const sharpBlobs = await captureMultipleSharp(5, 3);
+    // Capture 5 frames, pick the single sharpest
+    const sharpBlobs = await captureMultipleSharp(5, 1);
     if (sharpBlobs.length === 0) return;
 
     if (captureStage === 'neck') {
-      // Save the 3 neck samples, advance to base stage
+      // Save the best neck sample, advance to base stage
       neckSamplesRef.current = sharpBlobs;
       neckCaptureRef.current = sharpBlobs[0];
       setCaptureStage('base');
       setAlignState('searching');
       stableFramesRef.current = 0;
     } else {
-      // Base stage: combine neck + base samples and send all
+      // Base stage: send only the best frame
       setCaptured(true);
       setCaptureStage('done');
-      const allBlobs = [...neckSamplesRef.current, ...sharpBlobs];
-      const files = allBlobs.map(
-        (blob, idx) => new File([blob], `bottle-${Date.now()}-${idx}.jpg`, { type: 'image/jpeg' }),
-      );
-      onCapture(files);
+      const bestBlob = sharpBlobs[0];
+      const file = new File([bestBlob], `bottle-${Date.now()}.jpg`, { type: 'image/jpeg' });
+      onCapture([file]);
     }
   }, [captured, captureStage, onCapture, captureMultipleSharp]);
 
