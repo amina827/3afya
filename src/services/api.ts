@@ -1,11 +1,25 @@
-const RETIRED_API_URL = 'https://3afya-backend-production.up.railway.app';
-const PRODUCTION_API_URL = 'https://web-production-393e8.up.railway.app';
+const DEFAULT_DEV_API_URL = 'http://127.0.0.1:8000';
 
-const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL || PRODUCTION_API_URL;
-const API_URL = (configuredApiUrl === RETIRED_API_URL ? PRODUCTION_API_URL : configuredApiUrl).replace(
-  /\/$/,
-  '',
-);
+const configuredApiUrl = (process.env.NEXT_PUBLIC_API_URL || '').trim();
+const API_URL = (configuredApiUrl || DEFAULT_DEV_API_URL).replace(/\/$/, '');
+
+function buildApiUrl(path: string): string {
+  return `${API_URL}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const url = buildApiUrl(path);
+  try {
+    return await fetch(url, init);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(
+        `Network error: could not reach API at ${API_URL}. Set NEXT_PUBLIC_API_URL correctly and verify CORS/backend availability.`,
+      );
+    }
+    throw error;
+  }
+}
 
 export interface ScanSessionResponse {
   scan_id: string;
@@ -72,7 +86,7 @@ export function getBottleId(productId: string): string {
 
 /** Step 1: Create a scan session */
 export async function createScanSession(bottleId: string): Promise<ScanSessionResponse> {
-  const res = await fetch(`${API_URL}/scan/${bottleId}/`, {
+  const res = await apiFetch(`/scan/${bottleId}/`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error(`Failed to create scan session: ${res.status}`);
@@ -90,7 +104,7 @@ export async function uploadBottleImage(
   formData.append('image', image);
   if (scanId) formData.append('scan_id', scanId);
 
-  const res = await fetch(`${API_URL}/api/upload-bottle-image/`, {
+  const res = await apiFetch('/api/upload-bottle-image/', {
     method: 'POST',
     body: formData,
   });
@@ -103,14 +117,14 @@ export async function uploadBottleImage(
 
 /** Step 3: Get scan result (poll if needed) */
 export async function getScanResult(scanId: string): Promise<ScanResultResponse> {
-  const res = await fetch(`${API_URL}/api/result/${scanId}/`);
+  const res = await apiFetch(`/api/result/${scanId}/`);
   if (!res.ok) throw new Error(`Failed to get result: ${res.status}`);
   return res.json();
 }
 
 /** Step 4 (optional): Set target level */
 export async function setTargetLevel(scanId: string, targetCups: number): Promise<TargetResponse> {
-  const res = await fetch(`${API_URL}/api/target-level/`, {
+  const res = await apiFetch('/api/target-level/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ scan_id: scanId, target_cups: targetCups }),
@@ -125,7 +139,7 @@ export async function submitFeedback(
   actualCups: number,
   notes: string = '',
 ): Promise<FeedbackResponse> {
-  const res = await fetch(`${API_URL}/api/feedback/`, {
+  const res = await apiFetch('/api/feedback/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ scan: scanId, actual_cups: actualCups, notes }),
@@ -155,7 +169,7 @@ export async function uploadTrainingImage(
   if (notes) formData.append('notes', notes);
   if (uploadedBy) formData.append('uploaded_by', uploadedBy);
 
-  const res = await fetch(`${API_URL}/api/training/upload/`, {
+  const res = await apiFetch('/api/training/upload/', {
     method: 'POST',
     body: formData,
   });
@@ -174,7 +188,7 @@ export async function getTrainingStats(): Promise<{
   by_environment: Record<string, number>;
   by_bottle: Array<{ bottle__bottle_id: string; bottle__bottle_name: string; count: number }>;
 }> {
-  const res = await fetch(`${API_URL}/api/training/stats/`);
+  const res = await apiFetch('/api/training/stats/');
   if (!res.ok) throw new Error(`Failed to get stats: ${res.status}`);
   return res.json();
 }
