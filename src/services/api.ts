@@ -1,4 +1,11 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const RETIRED_API_URL = 'https://3afya-backend-production.up.railway.app';
+const PRODUCTION_API_URL = 'https://web-production-393e8.up.railway.app';
+
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL || PRODUCTION_API_URL;
+const API_URL = (configuredApiUrl === RETIRED_API_URL ? PRODUCTION_API_URL : configuredApiUrl).replace(
+  /\/$/,
+  '',
+);
 
 export interface ScanSessionResponse {
   scan_id: string;

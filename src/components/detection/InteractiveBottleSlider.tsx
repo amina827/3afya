@@ -127,6 +127,7 @@ export function InteractiveBottleSlider({
 
   // Framer Motion spring for the animated measurement line Y position
   const springY = useSpring(0, { stiffness: 260, damping: 28 });
+  const arrowY = useTransform(springY, (v) => v - 4);
 
   const bbox = computeBbox();
   void imgNaturalSize; // referenced to trigger re-compute when natural size changes
@@ -261,7 +262,7 @@ export function InteractiveBottleSlider({
                     fontSize="11"
                     fontWeight="900"
                     textAnchor="middle"
-                    style={{ y: useTransform(springY, (v) => v - 4) }}
+                    style={{ y: arrowY }}
                   >
                     ↓
                   </motion.text>
@@ -295,11 +296,11 @@ export function InteractiveBottleSlider({
                     x1={bbox.bx - 5}
                     y1={bbox.surfaceY}
                     x2={bbox.bx - 5}
+                    y2={springY}
                     stroke="#F5B700"
                     strokeWidth="1.2"
                     strokeOpacity="0.5"
                     strokeDasharray="2 2"
-                    style={{ y2: springY }}
                   />
                 </>
               )}
